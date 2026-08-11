@@ -51,9 +51,12 @@ func (m *Model) render() string {
 
 	box := m.boxWidth()
 	var rows []string
-	if m.screen == screenResults {
+	switch m.screen {
+	case screenResults:
 		rows = m.resultRows(box)
-	} else {
+	case screenStats:
+		rows = m.statsRows(box)
+	default:
 		rows = m.testRows(box)
 	}
 
@@ -197,8 +200,10 @@ func (m *Model) statusBar(box int) string {
 	switch {
 	case m.overlay == overlayOptions:
 		hint = "↑↓ row · ←→ change · enter restart · esc back"
-	case m.screen == screenResults:
-		hint = "enter next · esc repeat · tab options · ctrl+c quit"
+	// Stats are only offered when they can be reached: opening them mid-test
+	// would throw the run away.
+	case !m.running:
+		hint = "esc restart · tab options · ctrl+s stats · ctrl+c quit"
 	}
 	gap := box - layout.Width(leftPlain) - layout.Width(hint)
 	if gap < 2 {

@@ -59,6 +59,47 @@ func Bars(vals []float64, width, height int, max float64) []string {
 	return rows
 }
 
+// Frame picks the vertical bounds for a bar chart. Anchoring at zero turns a
+// steady series into a solid block, so the floor drops to a round multiple of
+// minSpan just below the smallest value instead; both bounds are meant to be
+// labelled, so the zoom is stated rather than implied. The ceiling is the peak
+// itself, so the largest value reaches the top row — rounding it up would leave
+// the first row permanently blank. minSpan also stops a flat series from being
+// magnified into noise.
+func Frame(vals []float64, minSpan float64) (floor, top float64) {
+	if len(vals) == 0 {
+		return 0, minSpan
+	}
+	trough, peak := bounds(vals)
+	top = peak
+	if trough > 0 && minSpan > 0 {
+		floor = math.Floor(trough/minSpan) * minSpan
+	}
+	if top-floor < minSpan {
+		floor = math.Max(0, top-minSpan)
+	}
+	return floor, top
+}
+
+// Widen gives each value an equal block of columns when there is room for more
+// than one apiece, so a short series draws wide bars rather than a sliver at the
+// left edge. Whole-number widths keep every bar the same size, which is what
+// stops the result reading as invented detail. It returns the widened values
+// and the width they occupy, which can be less than width.
+func Widen(vals []float64, width int) ([]float64, int) {
+	if len(vals) == 0 || width <= 0 || len(vals) > width {
+		return vals, width
+	}
+	per := width / len(vals)
+	out := make([]float64, 0, per*len(vals))
+	for _, v := range vals {
+		for i := 0; i < per; i++ {
+			out = append(out, v)
+		}
+	}
+	return out, per * len(vals)
+}
+
 // Marks builds a row of markers under a chart, one column per resampled slot,
 // flagging any slot whose source values contained an error.
 func Marks(errs []int, width int, mark rune) string {

@@ -24,10 +24,33 @@ func (m *Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.overlay == overlayOptions {
 		return m.onOptionsKey(msg)
 	}
-	if m.screen == screenResults {
+	switch m.screen {
+	case screenStats:
+		return m.onStatsKey(msg)
+	case screenResults:
 		return m.onResultsKey(msg)
 	}
 	return m.onTestKey(msg)
+}
+
+// openStats remembers the current screen so that leaving the stats view returns
+// to it, rather than discarding a finished result or a loaded test.
+func (m *Model) openStats() {
+	m.returnTo = m.screen
+	m.screen = screenStats
+	m.statsFilter = 0
+}
+
+func (m *Model) onStatsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc", "ctrl+s":
+		m.screen = m.returnTo
+	case "left", "h":
+		m.cycleFilter(-1)
+	case "right", "l":
+		m.cycleFilter(+1)
+	}
+	return m, nil
 }
 
 func (m *Model) onTestKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -39,6 +62,13 @@ func (m *Model) onTestKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "tab":
 		m.overlay = overlayOptions
 		m.optRow = 0
+		return m, nil
+	case "ctrl+s":
+		// Ignored once the clock is running: there is no way back into a test
+		// mid-flow, so opening stats would silently cost the run.
+		if !m.running {
+			m.openStats()
+		}
 		return m, nil
 	// Terminals without key disambiguation report ctrl+backspace as one of
 	// these, so all three delete a word.
@@ -114,6 +144,8 @@ func (m *Model) onResultsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "tab":
 		m.overlay = overlayOptions
 		m.optRow = 0
+	case "ctrl+s":
+		m.openStats()
 	}
 	return m, nil
 }

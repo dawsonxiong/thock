@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/dawsonxiong/thock/internal/config"
+	"github.com/dawsonxiong/thock/internal/history"
 	"github.com/dawsonxiong/thock/internal/stats"
 )
 
@@ -76,6 +77,51 @@ func TestDump(t *testing.T) {
 	nc := mk(Options{Mode: ModeTime, Duration: 30, Words: 25, List: "1k", Theme: "mono", Colour: false})
 	press(nc, string(nc.eng.Words[0].Target)+" "+string(nc.eng.Words[1].Target[:1])+"zx ")
 	show("NO_COLOR — state by underline and dim", nc)
+
+	for _, size := range [][2]int{{96, 30}, {80, 24}, {64, 18}} {
+		s := mk(base)
+		s.records = fakeHistory()
+		s.Update(tea.WindowSizeMsg{Width: size[0], Height: size[1]})
+		s.openStats()
+		show(fmt.Sprintf("stats — all, %dx%d", size[0], size[1]), s)
+		if size[0] == 96 {
+			key(s, tea.KeyRight)
+			show("stats — filtered to one setup", s)
+		}
+	}
+
+	empty := mk(base)
+	empty.records = nil
+	empty.openStats()
+	show("stats — no history yet", empty)
+}
+
+// fakeHistory is a plausible few months of practice: mostly 30 second runs
+// that improve over time, with a scatter of other setups around them.
+func fakeHistory() []history.Record {
+	day := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
+	var out []history.Record
+	add := func(mode string, dur, words int, wpm, acc, cons float64) {
+		day = day.Add(19 * time.Hour)
+		out = append(out, history.Record{
+			At: day, Mode: mode, Duration: dur, Words: words, List: "1k",
+			WPM: wpm, Raw: wpm * 1.07, Accuracy: acc, Consistency: cons,
+		})
+	}
+	for i := 0; i < 46; i++ {
+		drift := float64(i) * 0.55
+		wobble := float64((i*37)%13) - 6
+		add("time", 30, 0, 68+drift+wobble, 93+float64((i*7)%6), 74+float64((i*11)%17))
+		switch i % 7 {
+		case 3:
+			add("time", 60, 0, 64+drift*0.8+wobble, 94+float64((i*5)%5), 77+float64((i*3)%14))
+		case 5:
+			add("words", 0, 25, 71+drift+wobble, 95+float64((i*3)%4), 80+float64((i*13)%12))
+		case 6:
+			add("quotes", 0, 0, 66+drift*0.6+wobble, 96+float64(i%3), 82+float64((i*17)%10))
+		}
+	}
+	return out
 }
 
 func fakeSamples() []stats.Sample {
