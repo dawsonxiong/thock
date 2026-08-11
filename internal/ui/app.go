@@ -23,6 +23,7 @@ type screen uint8
 const (
 	screenTest screen = iota
 	screenResults
+	screenStats
 )
 
 type overlay uint8
@@ -65,6 +66,10 @@ type Model struct {
 
 	screen  screen
 	overlay overlay
+	// returnTo is the screen the stats view was opened from, so leaving it
+	// gives back the result rather than throwing it away.
+	returnTo    screen
+	statsFilter int
 
 	tbl   theme.Table
 	cache render.Cache

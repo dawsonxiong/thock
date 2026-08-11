@@ -3,10 +3,12 @@ package ui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/dawsonxiong/thock/internal/config"
+	"github.com/dawsonxiong/thock/internal/history"
 	"github.com/dawsonxiong/thock/internal/layout"
 	"github.com/dawsonxiong/thock/internal/stats"
 )
@@ -40,6 +42,8 @@ func press(m *Model, s string) {
 }
 
 func key(m *Model, code rune) { m.Update(tea.KeyPressMsg{Code: code}) }
+
+func ctrl(m *Model, code rune) { m.Update(tea.KeyPressMsg{Code: code, Mod: tea.ModCtrl}) }
 
 // strip removes escape sequences so assertions read against visible text.
 func strip(s string) string {
@@ -208,6 +212,59 @@ func TestWordsModeEndsOnCountAndIgnoresLetters(t *testing.T) {
 	}
 	if m.eng != before {
 		t.Error("a letter started a new test from the results screen")
+	}
+}
+
+// Stats open over a finished result and must give it back, not throw it away:
+// the run has only just been scored and is the reason for looking. Mid-test the
+// key is inert for the same reason — there is no way back into a run in flow.
+func TestStatsScreenOpensAndReturnsToResult(t *testing.T) {
+	m := newTestModel(t, 96, 30)
+	m.records = fakeHistory()
+
+	press(m, string(m.eng.Words[0].Target)+" ")
+	if !m.running {
+		t.Fatal("setup: typing did not start the clock")
+	}
+	ctrl(m, 's')
+	if m.screen != screenTest {
+		t.Fatal("ctrl+s abandoned a running test")
+	}
+
+	m.elapsed = 30 * time.Second
+	m.finish()
+	wpm := m.res.WPM
+	ctrl(m, 's')
+	if m.screen != screenStats {
+		t.Fatal("ctrl+s did not open stats from the results screen")
+	}
+
+	frame := strip(m.View().Content)
+	for _, want := range []string{"stats", "wpm", "best", "runs", "30s"} {
+		if !strings.Contains(frame, want) {
+			t.Errorf("stats frame is missing %q:\n%s", want, frame)
+		}
+	}
+
+	// Filtering narrows to one comparable setup, and only that setup.
+	key(m, tea.KeyRight)
+	filter := m.filters()[m.statsFilter]
+	if filter != "30s" {
+		t.Fatalf("first filter is %q, want the most practised setup (30s)", filter)
+	}
+	if n := len(history.Track(m.records, filter).WPM); n == 0 {
+		t.Error("filtering to 30s left no runs to chart")
+	}
+	if !strings.Contains(strip(m.View().Content), "stats · 30s") {
+		t.Error("the active filter is not named in the header")
+	}
+
+	key(m, tea.KeyEscape)
+	if m.screen != screenResults {
+		t.Fatal("esc did not return to the result")
+	}
+	if m.res.WPM != wpm {
+		t.Errorf("the result changed while stats were open: %.2f, was %.2f", m.res.WPM, wpm)
 	}
 }
 
