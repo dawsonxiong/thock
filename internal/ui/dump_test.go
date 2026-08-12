@@ -57,6 +57,13 @@ func TestDump(t *testing.T) {
 	m.isPB = true
 	show("results — mono", m)
 
+	// The character tallies spell themselves out only when the box has room.
+	narrow := mk(base)
+	narrow.Update(tea.WindowSizeMsg{Width: 58, Height: 24})
+	narrow.res = m.res
+	narrow.screen = screenResults
+	show("results — 58x24, tallies fall back to the compact form", narrow)
+
 	for _, name := range []string{"gruvbox", "nord", "amber"} {
 		m2 := mk(Options{Mode: ModeTime, Duration: 30, Words: 25, List: "1k", Theme: name, Colour: true})
 		press(m2, string(m2.eng.Words[0].Target)+" "+string(m2.eng.Words[1].Target[:1])+"zx ")

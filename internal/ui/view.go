@@ -175,6 +175,17 @@ func (m *Model) configBar() string {
 	return strings.Join(parts, m.paint(m.tbl.Dim, "   "))
 }
 
+// fit returns the first variant that fits the width, so a narrow terminal drops
+// the least important reminders rather than running past the edge of the box.
+func fit(width int, variants ...string) string {
+	for _, v := range variants {
+		if layout.Width(v) <= width {
+			return v
+		}
+	}
+	return variants[len(variants)-1]
+}
+
 // statusBar shows the clock or progress on the left and the key hints on the
 // right, with the gap sized so the hints sit flush to the box edge.
 func (m *Model) statusBar(box int) string {
@@ -203,7 +214,10 @@ func (m *Model) statusBar(box int) string {
 	// Stats are only offered when they can be reached: opening them mid-test
 	// would throw the run away.
 	case !m.running:
-		hint = "esc restart · tab options · ctrl+s stats · ctrl+c quit"
+		hint = fit(box-layout.Width(leftPlain)-2,
+			"esc restart · tab options · ctrl+s stats · ctrl+c quit",
+			"esc restart · tab options · ctrl+s stats",
+			"tab options · ctrl+s stats")
 	}
 	gap := box - layout.Width(leftPlain) - layout.Width(hint)
 	if gap < 2 {

@@ -16,7 +16,7 @@ time  15 30 60 120   list 1k 5k
 the quick brown fox jumps over the lazy dog and
 then runs back again to the house before the rain
 
-30                    esc restart · tab options
+30           esc restart · tab options · ctrl+s stats
 ```
 
 Run it and start typing. There is no menu to get through first.

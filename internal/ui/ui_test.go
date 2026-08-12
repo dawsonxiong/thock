@@ -284,11 +284,16 @@ func TestShortRunStillDrawsChart(t *testing.T) {
 				secs, len(rows), chartHeight)
 			continue
 		}
-		// Every row of the plot must be the same width or the axis shears.
-		want := layout.Width(strip(rows[0]))
-		for i, r := range rows {
+		if !strings.Contains(strip(rows[0]), "raw wpm per second") {
+			t.Errorf("%ds run: chart is not labelled: %q", secs, strip(rows[0]))
+		}
+		// Every row of the plot must be the same width or the axis shears. The
+		// header above it spans the whole box and is measured separately.
+		plot := rows[1:]
+		want := layout.Width(strip(plot[0]))
+		for i, r := range plot {
 			if got := layout.Width(strip(r)); got != want {
-				t.Errorf("%ds run: chart row %d is %d cells, row 0 is %d",
+				t.Errorf("%ds run: plot row %d is %d cells, row 0 is %d",
 					secs, i, got, want)
 			}
 		}
