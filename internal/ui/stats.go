@@ -57,7 +57,8 @@ func (m *Model) statsRows(box int) []string {
 		m.paint(m.tbl.Dim, strings.Repeat("─", box)),
 		"",
 	}
-	hints := m.paint(m.tbl.Dim, "esc back · ←→ filter · ctrl+c quit")
+	hints := m.paint(m.tbl.Dim, fit(box,
+		"esc back · ←→ filter · ctrl+c quit", "esc back · ←→ filter"))
 
 	s := history.Track(m.records, key)
 	if len(s.WPM) == 0 {
