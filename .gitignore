@@ -1,2 +1,4 @@
 /thock
 *.test
+/scripts/screenshots/node_modules/
+/scripts/screenshots/out/

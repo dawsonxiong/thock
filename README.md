@@ -2,24 +2,28 @@
 
 A typing test for the terminal, with Monkeytype's scoring.
 
-```
-       _                 _
-   _  | |               | |
- _| |_| |__   ___   ____| |  _
-(_   _)  _ \ / _ \ / ___) |_/ )
-  | |_| | | | |_| ( (___|  _ (
-   \__)_| |_|\___/ \____)_| \_)
-
-time  15 30 60 120   list 1k 5k
-──────────────────────────────────────────────────
-
-the quick brown fox jumps over the lazy dog and
-then runs back again to the house before the rain
-
-30           esc restart · tab options · ctrl+s stats
-```
+![Thock start screen: the ASCII thock banner above the time and word-list options, with the first three lines of words waiting to be typed](docs/screenshots/start.webp)
 
 Run it and start typing. There is no menu to get through first.
+
+## Features
+
+- Monkeytype's formulas, so wpm, raw, accuracy and consistency match monkeytype.com.
+- Time, words and quotes modes, on a 1k or 5k word list.
+- A stats screen with every run, trend lines and personal bests per setup.
+- Ten themes, one of which uses your terminal's own palette, and full `NO_COLOR` support.
+- Results stay on your machine in an append-only log.
+- About 4 µs of work per keystroke, redrawing at up to 120 FPS.
+
+## Screenshots
+
+| Mid-test | Results after a 30s test |
+| :-: | :-: |
+| <img src="docs/screenshots/typing.webp" alt="Thock mid-test with typed words in white, a mistyped letter in red and upcoming words dimmed, live wpm in the corner" width="400"> | <img src="docs/screenshots/results.webp" alt="Thock results after a 30-second test: 116 wpm, 99% accuracy, a raw-wpm-per-second bar chart with the one mistake marked" width="400"> |
+
+## Stack
+
+Go, Bubble Tea v2, Cobra.
 
 ## Install
 
@@ -71,24 +75,7 @@ gives back whichever you came from. It shows one bar per run with a smoothed
 line beneath, accuracy and consistency as their own tracks, and a table of
 bests, averages and run counts per setup:
 
-```
-stats · 30s                                    ←→ filter
-────────────────────────────────────────────────────────
-
-95 best   ·   80 avg   ·   95% acc   ·   46 runs
-
-wpm                                       74 → 86   ↑ 12
-  95 │                        ▄▂     █▆▄▂
-     │            ▂    ▆▄▂   ███▆▄▂ █████▆
-  60 │▃████████▇▅▃███████▆▄█████████████████
-      ──────────────────────────────────────
- avg  ▁▂▃▃▃▃▄▄▄▄▄▅▅▅▅▆▆▆▆▆▇▇▇▇▇▇███
- acc  ▁▂▄▅▇█▁▂▄▅▇█▂▄▅▇▇█▁▂▄▄▅▇▇██  91–98%
-
-          best   avg    acc  runs
-❯ 30s       95    80    95%    46
-  60s       79    73    94%     7
-```
+![Thock stats screen over ten runs: best and average wpm, a run-history chart, accuracy and consistency sparklines, and a per-mode table](docs/screenshots/stats.webp)
 
 The filter cycles through the setups you have actually recorded. Groups are
 never pooled: a 30 second run is only comparable with other 30 second runs, the
@@ -119,6 +106,23 @@ monkeytype.com:
 
 Characters skipped by an early space count against speed but not accuracy: no
 key was ever pressed for them.
+
+## Performance
+
+Bubble Tea redraws at up to 120 FPS, so the number that matters is how much work one keystroke costs before the next frame can go out. `internal/ui/bench_test.go` measures it:
+
+```
+go test ./internal/ui -bench 'Keystroke|View' -benchmem
+```
+
+On an Apple M4 with Go 1.27 (2026-09-22), a 120x40 terminal, words mode with the 1k list:
+
+| Benchmark | Time | Allocations |
+|---|---|---|
+| Keystroke (one key press through `Update`, then `View`) | ~4.1 us | 43 |
+| View alone (build one frame) | ~1.5 us | 36 |
+
+That is about 2,000x under the 8.3 ms frame budget at 120 FPS, so input latency is bounded by the terminal, not by thock.
 
 ## Themes
 
