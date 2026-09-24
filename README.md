@@ -1,19 +1,16 @@
 # thock
 
-A typing test for the terminal, with Monkeytype's scoring.
+Monkeytype, straight in your terminal. It uses the same scoring formulas, so your numbers line up with monkeytype.com.
 
 ![Thock start screen: the ASCII thock banner above the time and word-list options, with the first three lines of words waiting to be typed](docs/screenshots/start.webp)
 
-Run it and start typing. There is no menu to get through first.
-
 ## Features
 
-- Monkeytype's formulas, so wpm, raw, accuracy and consistency match monkeytype.com.
-- Time, words and quotes modes, on a 1k or 5k word list.
-- A stats screen with every run, trend lines and personal bests per setup.
-- Ten themes, one of which uses your terminal's own palette, and full `NO_COLOR` support.
-- Results stay on your machine in an append-only log.
-- About 4 µs of work per keystroke, redrawing at up to 120 FPS.
+- Time, words and quotes modes, with a 1k or 5k word list
+- wpm, raw, accuracy and consistency, calculated the way Monkeytype does it
+- A stats screen with your run history, trend lines and personal bests
+- 10 themes, plus `NO_COLOR` support
+- Redraws at 120 FPS, and a keystroke takes about 4 µs to process
 
 ## Screenshots
 
@@ -31,13 +28,13 @@ Go, Bubble Tea v2, Cobra.
 go install github.com/dawsonxiong/thock@latest
 ```
 
-Or from a clone:
+or build it from a clone:
 
 ```sh
 go build -o thock . && ./thock
 ```
 
-Requires Go 1.25 or newer.
+You'll need Go 1.25+.
 
 ## Usage
 
@@ -51,7 +48,7 @@ thock --theme gruvbox     # see `thock themes`
 thock stats               # personal bests and recent runs
 ```
 
-Naming a limit picks the mode that uses it, so `--words 50` needs no `--mode`.
+If you pass `--time` or `--words` you don't need `--mode` as well.
 
 ## Keys
 
@@ -59,83 +56,56 @@ Naming a limit picks the mode that uses it, so `--words 50` needs no `--mode`.
 |---|---|
 | `esc` | restart with the same text |
 | `enter` | new text (on the results screen) |
-| `tab` | options — `enter` there applies and restarts, `esc` backs out |
-| `ctrl+s` | stats — `←→` filters, `esc` goes back |
+| `tab` | options (`enter` to apply and restart, `esc` to back out) |
+| `ctrl+s` | stats (`←→` to filter, `esc` to go back) |
 | `ctrl+w` | delete the last word |
 | `ctrl+c` | quit |
 
-The results screen ignores printable characters on purpose. Momentum
-keystrokes landing after your final word should not skip you past your own
-result.
+Typing on the results screen doesn't do anything, so an extra keystroke after your last word won't skip past your score.
 
 ## Stats
 
-`ctrl+s` opens the stats screen from an idle test or from a result, and `esc`
-gives back whichever you came from. It shows one bar per run with a smoothed
-line beneath, accuracy and consistency as their own tracks, and a table of
-bests, averages and run counts per setup:
+`ctrl+s` opens stats from an idle test or the results screen, and `esc` takes you back. It doesn't work in the middle of a test.
 
 ![Thock stats screen over ten runs: best and average wpm, a run-history chart, accuracy and consistency sparklines, and a per-mode table](docs/screenshots/stats.webp)
 
-The filter cycles through the setups you have actually recorded. Groups are
-never pooled: a 30 second run is only comparable with other 30 second runs, the
-same rule the personal bests use.
+Each bar is one run, with a smoothed average underneath. Accuracy and consistency get their own sparklines, each labelled with its own min and max, and the table at the bottom has your bests and averages for each setup. `←→` switches between the setups you've played. Runs are only compared with the same setup, so a 30s run won't count toward your 60s bests.
 
-The two sparkline rows stretch their eight levels across whatever range the data
-has, so each is labelled with its own bounds — accuracy lives in a narrow band
-near the top of its scale, and unlabelled that would read as violent swings.
-
-`ctrl+s` does nothing once the clock is running. There is no way back into a
-test mid-flow, so opening stats would quietly cost you the run.
-
-`thock stats` prints bests, a trend line and recent results without starting the
-interface.
+`thock stats` prints the same numbers without opening the UI.
 
 ## Scoring
 
-The formulas are Monkeytype's, so the numbers are comparable to scores from
-monkeytype.com:
+Same formulas as Monkeytype:
 
-- **wpm** — correctly entered characters plus one space per perfectly typed
-  word, divided by five, per minute
-- **raw** — everything entered, scored the same way
-- **accuracy** — measured over keystroke history rather than the final text, so
-  a mistake you corrected still costs you
-- **consistency** — `kogasa` applied to the coefficient of variation of
-  per-second raw speed, using the population standard deviation
+- **wpm**: correct characters, plus one space for each word typed perfectly, divided by five, per minute
+- **raw**: the same thing but counting everything you typed
+- **accuracy**: based on every keystroke, so a mistake still counts even if you fixed it
+- **consistency**: Monkeytype's `kogasa` function applied to the coefficient of variation of your per-second raw speed (population standard deviation)
 
-Characters skipped by an early space count against speed but not accuracy: no
-key was ever pressed for them.
+If you hit space early and skip part of a word, the skipped characters count against your speed but not your accuracy.
 
 ## Performance
 
-Bubble Tea redraws at up to 120 FPS, so the number that matters is how much work one keystroke costs before the next frame can go out. `internal/ui/bench_test.go` measures it:
+The benchmarks are in `internal/ui/bench_test.go`:
 
 ```
 go test ./internal/ui -bench 'Keystroke|View' -benchmem
 ```
 
-On an Apple M4 with Go 1.27 (2026-09-22), a 120x40 terminal, words mode with the 1k list:
+On an M4 (Go 1.27, 120x40 terminal, words mode, 1k list, run on 2026-09-22):
 
 | Benchmark | Time | Allocations |
 |---|---|---|
-| Keystroke (one key press through `Update`, then `View`) | ~4.1 us | 43 |
-| View alone (build one frame) | ~1.5 us | 36 |
+| Keystroke (`Update` then `View`) | ~4.1 µs | 43 |
+| View only | ~1.5 µs | 36 |
 
-That is about 2,000x under the 8.3 ms frame budget at 120 FPS, so input latency is bounded by the terminal, not by thock.
+A frame at 120 FPS is 8.3 ms, so a keystroke uses about 1/2000th of it.
 
 ## Themes
 
-Ten built in — `mono` (default), `amber`, `neon`, `terminal`, `catppuccin`,
-`gruvbox`, `nord`, `dracula`, `tokyonight` and `rosepine`. Run `thock themes`
-to see them with live colour samples.
+`mono` (default), `amber`, `neon`, `terminal`, `catppuccin`, `gruvbox`, `nord`, `dracula`, `tokyonight` and `rosepine`. Run `thock themes` to preview them.
 
-`terminal` uses only ANSI 0–15, so it inherits whatever palette your terminal
-already has.
-
-`NO_COLOR` and `--no-color` are both honoured. In that mode state is carried by
-underline and dim rather than by hue, so the test stays fully playable with no
-colour at all.
+`terminal` only uses ANSI colours 0–15, so it matches whatever palette your terminal has. With `NO_COLOR` or `--no-color`, thock uses underline and dim text instead of colour.
 
 ## Files
 
@@ -144,14 +114,11 @@ colour at all.
 | `~/.config/thock/config.toml` | theme and last-used test settings |
 | `~/.local/share/thock/results.jsonl` | one JSON object per finished test |
 
-Both honour `XDG_CONFIG_HOME` and `XDG_DATA_HOME`. The results log is
-append-only and greppable; nothing is ever sent anywhere.
+Both respect `XDG_CONFIG_HOME` and `XDG_DATA_HOME`. Results are plain JSONL and stay on your machine.
 
 ## Not affiliated with Monkeytype
 
-thock borrows Monkeytype's scoring formulas so the numbers mean the same thing.
-It is a separate program, it does not talk to monkeytype.com, and results
-recorded here are local to your machine.
+thock uses Monkeytype's scoring formulas but has no connection to Monkeytype, and it doesn't talk to monkeytype.com.
 
 ## Licence
 
