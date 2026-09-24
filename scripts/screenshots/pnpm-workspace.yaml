@@ -1,0 +1,5 @@
+# node-pty and sharp ship prebuilt binaries for macOS, so neither needs its install script.
+# capture.mjs marks node-pty's spawn-helper executable itself.
+allowBuilds:
+  node-pty: false
+  sharp: false
