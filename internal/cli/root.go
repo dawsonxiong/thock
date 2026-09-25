@@ -58,7 +58,7 @@ func Execute(ctx context.Context) error {
 	pf.StringVar(&f.themeNam, "theme", "", "colour theme, or 'list' to show them all")
 	pf.BoolVar(&f.noColour, "no-color", false, "disable colour output")
 
-	root.AddCommand(statsCmd(), themesCmd())
+	root.AddCommand(statsCmd(), themesCmd(), raceCmd())
 	return fang.Execute(ctx, root, fang.WithVersion(version))
 }
 
@@ -107,6 +107,7 @@ func resolve(f *flags) (ui.Options, config.Config, error) {
 		o.Theme = f.themeNam
 	}
 	o.Colour = colourEnabled(f.noColour)
+	o.Name = racerName("", cfg)
 
 	switch o.Mode {
 	case ui.ModeTime, ui.ModeWords, ui.ModeQuotes:

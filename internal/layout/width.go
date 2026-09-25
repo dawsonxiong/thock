@@ -9,3 +9,6 @@ func runeWidth(r rune) int { return runewidth.RuneWidth(r) }
 
 // Width is the cell width of a string.
 func Width(s string) int { return runewidth.StringWidth(s) }
+
+// Truncate cuts a string to at most w cells, marking the cut with an ellipsis.
+func Truncate(s string, w int) string { return runewidth.Truncate(s, w, "…") }

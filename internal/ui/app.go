@@ -24,6 +24,10 @@ const (
 	screenTest screen = iota
 	screenResults
 	screenStats
+	screenBrowse // rooms on the network
+	screenLobby  // in a room, between rounds
+	screenRace   // a round, or its replay
+	screenPodium // a round's standings
 )
 
 type overlay uint8
@@ -50,6 +54,7 @@ type Options struct {
 	Length   content.Length
 	Theme    string
 	Colour   bool
+	Name     string // what other racers see
 }
 
 // Model is the whole application state.
@@ -85,6 +90,12 @@ type Model struct {
 
 	caretX, caretY int
 	caretOK        bool
+
+	// race is the room this screen is in, and browse the room list; both
+	// are nil when typing alone.
+	race    *session
+	browse  *browser
+	initCmd tea.Cmd
 
 	w, h     int
 	err      error
@@ -158,7 +169,7 @@ func (m *Model) reset(fresh bool) {
 	m.cache.Invalidate()
 }
 
-func (m *Model) Init() tea.Cmd { return nil }
+func (m *Model) Init() tea.Cmd { return m.initCmd }
 
 // limit is the wall time a test runs for, or zero when it ends on content
 // rather than on the clock.
@@ -233,6 +244,44 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyPressMsg:
 		return m.onKey(msg)
+
+	case netMsg:
+		if msg.s != m.race {
+			return m, nil // from a room already left
+		}
+		return m, tea.Batch(m.onNet(msg.s, msg.m), msg.s.listen())
+
+	case netClosedMsg:
+		if msg.s != m.race {
+			return m, nil
+		}
+		notice := "the room closed"
+		if msg.s.srv != nil {
+			notice = ""
+		}
+		return m, m.leaveRace(notice)
+
+	case raceTickMsg:
+		if msg.s != m.race {
+			return m, nil
+		}
+		return m, m.onRaceTick(msg.s)
+
+	case roomsMsg:
+		if msg.b != m.browse {
+			return m, nil
+		}
+		if !msg.ok {
+			return m, nil
+		}
+		msg.b.rooms = msg.rooms
+		if msg.b.sel > len(msg.rooms) {
+			msg.b.sel = len(msg.rooms)
+		}
+		return m, msg.b.listen()
+
+	case joinedMsg:
+		return m, m.onJoined(msg)
 	}
 	return m, nil
 }
@@ -240,7 +289,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *Model) View() tea.View {
 	v := tea.NewView(m.render())
 	v.AltScreen = true
-	if m.screen == screenTest && m.overlay == overlayNone && m.err == nil {
+	if m.caretScreen() && m.overlay == overlayNone && m.err == nil {
 		if x, y, ok := m.caret(); ok {
 			c := tea.NewCursor(x, y)
 			c.Blink = !m.running
@@ -248,4 +297,15 @@ func (m *Model) View() tea.View {
 		}
 	}
 	return v
+}
+
+// caretScreen reports whether the current screen has somewhere to type.
+func (m *Model) caretScreen() bool {
+	switch m.screen {
+	case screenTest, screenBrowse:
+		return true
+	case screenRace:
+		return m.race != nil && m.race.replay == nil
+	}
+	return false
 }

@@ -158,3 +158,17 @@ func RandomQuote(length Length) (Quote, error) {
 
 // QuoteWords splits a quote into the words the engine will test against.
 func QuoteWords(q Quote) []string { return strings.Fields(q.Text) }
+
+// Vocabulary returns a word list in its stored order. Room codes are spelled
+// with it, so the order is part of the race protocol and must not change.
+func Vocabulary(list List) ([]string, error) {
+	load()
+	if loadEr != nil {
+		return nil, loadEr
+	}
+	src, ok := words[list]
+	if !ok {
+		return nil, fmt.Errorf("unknown word list %q", list)
+	}
+	return append([]string(nil), src...), nil
+}

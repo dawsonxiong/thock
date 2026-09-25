@@ -15,6 +15,12 @@ import (
 type Config struct {
 	Theme string `toml:"theme"`
 	Test  Test   `toml:"test"`
+	Race  Race   `toml:"race"`
+}
+
+// Race is what thock remembers about racing.
+type Race struct {
+	Name string `toml:"name"` // shown to the other racers
 }
 
 // Test is the last-used test setup, restored on the next bare run.
@@ -75,6 +81,9 @@ func merge(def, raw Config) Config {
 	}
 	if raw.Test.Length != "" {
 		out.Test.Length = raw.Test.Length
+	}
+	if raw.Race.Name != "" {
+		out.Race.Name = raw.Race.Name
 	}
 	return out
 }

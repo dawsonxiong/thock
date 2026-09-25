@@ -26,6 +26,14 @@ type Record struct {
 	Accuracy    float64   `json:"accuracy"`
 	Consistency float64   `json:"consistency"`
 	Chars       [4]int    `json:"chars"` // correct, incorrect, extra, missed
+	Race        *Race     `json:"race,omitempty"`
+}
+
+// Race marks a record typed in a race. A race is a real words or quote test,
+// so it counts toward the same bests; this only says where it happened.
+type Race struct {
+	Place int `json:"place"` // 0 when the racer did not finish
+	Field int `json:"field"` // how many raced
 }
 
 // Key groups records that are comparable for a personal best: a 30 second run
