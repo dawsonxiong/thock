@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/dawsonxiong/thock/internal/layout"
+	"github.com/dawsonxiong/thock/internal/render"
+	"github.com/dawsonxiong/thock/internal/typing"
 )
 
 const (
@@ -56,6 +58,14 @@ func (m *Model) render() string {
 		rows = m.resultRows(box)
 	case screenStats:
 		rows = m.statsRows(box)
+	case screenBrowse:
+		rows = m.browseRows(box)
+	case screenLobby:
+		rows = m.lobbyRows(box)
+	case screenRace:
+		rows = m.raceRows(box)
+	case screenPodium:
+		rows = m.podiumRows(box)
 	default:
 		rows = m.testRows(box)
 	}
@@ -107,7 +117,9 @@ func (m *Model) choices(label string, values []string, active int) string {
 }
 
 func (m *Model) testRows(box int) []string {
-	var rows []string
+	// Sized for the tallest layout, banner and options pane included, so a
+	// keystroke's frame never regrows it.
+	rows := make([]string, 0, len(banner)+16)
 
 	// The wordmark is the first thing to go when space is short: it is
 	// decoration, and the text it would push off screen is the point.
@@ -127,33 +139,63 @@ func (m *Model) testRows(box int) []string {
 		rows = append(rows, "")
 	}
 
-	// The wrap is a pure function of the words and the width, so it is simply
-	// recomputed whenever either changes rather than kept across a resize.
-	if m.lines == nil || m.wrapVer != m.eng.Version() {
-		m.lines = layout.Wrap(m.eng, box)
-		m.wrapVer = m.eng.Version()
-	}
-	active := layout.LineOf(m.lines, m.eng.WordIdx)
-	top, bottom := layout.Window(m.lines, active)
+	rows = m.textRows(rows, box, m.eng, nil, false, m.overlay == overlayNone)
+	rows = append(rows, "")
+	rows = append(rows, m.statusBar(box))
+	return rows
+}
 
-	m.cache.Sync(box, m.eng.Version(), m.opts.Theme, len(m.lines), active)
-	textStart := len(rows)
+// textRows appends the visible window of text to rows: three wrapped lines
+// around the word being typed, with the caret's row measured from the rows
+// already there. A race hands in ghost marks, and during its countdown asks
+// for the words to stay hidden.
+func (m *Model) textRows(rows []string, box int, e *typing.Engine, marks []render.Mark, hidden, caret bool) []string {
+	at := len(rows)
+	// The wrap is a pure function of the words and the width, so it is simply
+	// recomputed whenever either changes rather than kept across a resize. Only
+	// the model's own engine is cached; a replay brings engines of its own.
+	lines := m.wrapFor(e, box)
+	active := layout.LineOf(lines, e.WordIdx)
+	top, bottom := layout.Window(lines, active)
+
+	if e == m.eng {
+		m.cache.Sync(box, m.eng.Version(), m.opts.Theme, len(lines), active)
+	}
 	for i := top; i < bottom; i++ {
-		rows = append(rows, m.cache.Get(m.eng, m.lines, &m.tbl, i))
+		switch {
+		case hidden:
+			var b strings.Builder
+			render.Hidden(e, lines[i], &m.tbl, &b)
+			rows = append(rows, b.String())
+		case e != m.eng || marksOn(marks, lines[i]):
+			// A row with a ghost on it changes with every update from the
+			// room, so it is drawn fresh rather than cached.
+			var b strings.Builder
+			render.Marked(e, lines[i], &m.tbl, marks, &b)
+			rows = append(rows, b.String())
+		default:
+			rows = append(rows, m.cache.Get(e, lines, &m.tbl, i))
+		}
 	}
 	for i := bottom - top; i < layout.VisibleLines; i++ {
 		rows = append(rows, "")
 	}
-
-	if m.overlay == overlayNone && active >= top && active < bottom {
-		m.caretX = layout.CaretColumn(m.eng, m.lines[active])
-		m.caretY = textStart + (active - top)
+	if caret && active >= top && active < bottom {
+		m.caretX = layout.CaretColumn(e, lines[active])
+		m.caretY = at + (active - top)
 		m.caretOK = true
 	}
-
-	rows = append(rows, "")
-	rows = append(rows, m.statusBar(box))
 	return rows
+}
+
+// marksOn reports whether any mark falls on a line.
+func marksOn(marks []render.Mark, l layout.Line) bool {
+	for _, mk := range marks {
+		if mk.Word >= l.First && mk.Word <= l.Last {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *Model) configBar() string {
@@ -215,6 +257,7 @@ func (m *Model) statusBar(box int) string {
 	// would throw the run away.
 	case !m.running:
 		hint = fit(box-layout.Width(leftPlain)-2,
+			"esc restart · tab options · ctrl+s stats · ctrl+r race · ctrl+c quit",
 			"esc restart · tab options · ctrl+s stats · ctrl+c quit",
 			"esc restart · tab options · ctrl+s stats",
 			"tab options · ctrl+s stats")

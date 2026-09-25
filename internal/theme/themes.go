@@ -15,6 +15,7 @@ var registry = map[string]Theme{
 		Text:      Style{FG: "#c8ccd4"},
 		Dim:       Style{FG: "#5c6370"},
 		Accent:    Style{FG: "#56b6c2"},
+		Racers:    [6]Colour{"#c678dd", "#e5c07b", "#98c379", "#61afef", "#d19a66", "#f0a8d0"},
 	},
 	"amber": {
 		Name: "amber", Desc: "cream on dark, amber accent",
@@ -26,6 +27,7 @@ var registry = map[string]Theme{
 		Text:      Style{FG: "#e6cfa0"},
 		Dim:       Style{FG: "#8a7550"},
 		Accent:    Style{FG: "#f0a500"},
+		Racers:    [6]Colour{"#8fbf7f", "#7fa7d9", "#d98fb3", "#c9b458", "#b39ddb", "#6fc2c2"},
 	},
 	"neon": {
 		Name: "neon", Desc: "cyan and magenta",
@@ -37,6 +39,7 @@ var registry = map[string]Theme{
 		Text:      Style{FG: "#d0d0e0"},
 		Dim:       Style{FG: "#6a6a8a"},
 		Accent:    Style{FG: "#00d7ff"},
+		Racers:    [6]Colour{"#ff5fd7", "#afff5f", "#ffd75f", "#af87ff", "#5fffaf", "#ff875f"},
 	},
 	"terminal": {
 		Name: "terminal", Desc: "inherits your terminal colours",
@@ -48,6 +51,7 @@ var registry = map[string]Theme{
 		Text:      Style{FG: "ansi:7"},
 		Dim:       Style{FG: "ansi:8"},
 		Accent:    Style{FG: "ansi:6"},
+		Racers:    [6]Colour{"ansi:5", "ansi:2", "ansi:3", "ansi:4", "ansi:13", "ansi:10"},
 	},
 	"catppuccin": {
 		Name: "catppuccin", Desc: "mocha",
@@ -59,6 +63,7 @@ var registry = map[string]Theme{
 		Text:      Style{FG: "#bac2de"},
 		Dim:       Style{FG: "#6c7086"},
 		Accent:    Style{FG: "#cba6f7"},
+		Racers:    [6]Colour{"#89b4fa", "#a6e3a1", "#f9e2af", "#fab387", "#94e2d5", "#f5c2e7"},
 	},
 	"gruvbox": {
 		Name: "gruvbox", Desc: "dark medium",
@@ -70,6 +75,7 @@ var registry = map[string]Theme{
 		Text:      Style{FG: "#d5c4a1"},
 		Dim:       Style{FG: "#7c6f64"},
 		Accent:    Style{FG: "#fabd2f"},
+		Racers:    [6]Colour{"#83a598", "#b8bb26", "#d3869b", "#8ec07c", "#fe8019", "#458588"},
 	},
 	"nord": {
 		Name: "nord", Desc: "arctic, north bluish",
@@ -81,6 +87,7 @@ var registry = map[string]Theme{
 		Text:      Style{FG: "#d8dee9"},
 		Dim:       Style{FG: "#616e88"},
 		Accent:    Style{FG: "#88c0d0"},
+		Racers:    [6]Colour{"#b48ead", "#a3be8c", "#ebcb8b", "#81a1c1", "#d08770", "#8fbcbb"},
 	},
 	"dracula": {
 		Name: "dracula", Desc: "classic dracula",
@@ -92,6 +99,7 @@ var registry = map[string]Theme{
 		Text:      Style{FG: "#e2e2dc"},
 		Dim:       Style{FG: "#6272a4"},
 		Accent:    Style{FG: "#bd93f9"},
+		Racers:    [6]Colour{"#ff79c6", "#50fa7b", "#f1fa8c", "#8be9fd", "#ffb86c", "#a4ffff"},
 	},
 	"tokyonight": {
 		Name: "tokyonight", Desc: "night",
@@ -103,6 +111,7 @@ var registry = map[string]Theme{
 		Text:      Style{FG: "#a9b1d6"},
 		Dim:       Style{FG: "#565f89"},
 		Accent:    Style{FG: "#7aa2f7"},
+		Racers:    [6]Colour{"#bb9af7", "#9ece6a", "#e0af68", "#7dcfff", "#ff9e64", "#73daca"},
 	},
 	"rosepine": {
 		Name: "rosepine", Desc: "soho vibes",
@@ -114,5 +123,6 @@ var registry = map[string]Theme{
 		Text:      Style{FG: "#c5c3ce"},
 		Dim:       Style{FG: "#6e6a86"},
 		Accent:    Style{FG: "#9ccfd8"},
+		Racers:    [6]Colour{"#c4a7e7", "#f6c177", "#ebbcba", "#3e8fb0", "#56949f", "#d7827e"},
 	},
 }

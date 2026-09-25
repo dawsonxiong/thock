@@ -22,6 +22,19 @@ func Sparkline(vals []float64, width int) string {
 	return string(out)
 }
 
+// Scaled draws one block per value against a fixed scale from lo to hi, rather
+// than the data's own range, so rows drawn against the same scale can be
+// compared by eye. Unlike Sparkline it never resamples: a value is a column.
+// The tallest block is left out, so rows stacked directly on top of each other
+// keep a sliver of space between them.
+func Scaled(vals []float64, lo, hi float64) string {
+	out := make([]rune, len(vals))
+	for i, x := range vals {
+		out[i] = blocks[level(x, lo, hi, 6)+1]
+	}
+	return string(out)
+}
+
 // Bars renders a column chart height rows tall, top row first. Values are
 // resampled to width columns and scaled against max, or against the data's own
 // peak when max is zero.
@@ -126,8 +139,10 @@ func Marks(errs []int, width int, mark rune) string {
 	return string(out)
 }
 
-// resample squeezes or stretches values onto exactly n slots, averaging the
+// Resample squeezes or stretches values onto exactly n slots, averaging the
 // source values that fall into each slot.
+func Resample(vals []float64, n int) []float64 { return resample(vals, n) }
+
 func resample(vals []float64, n int) []float64 {
 	if len(vals) == n {
 		return vals
