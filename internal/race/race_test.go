@@ -211,7 +211,7 @@ func TestRoomRunsARound(t *testing.T) {
 	if r.Phase() != PhaseRacing {
 		t.Fatalf("phase %s after the countdown", r.Phase())
 	}
-	if err := r.Report(late, 1, Progress{Done: 0.5}); err != ErrNotRacing {
+	if err := r.Report(late, 1, Progress{Done: 0.5}, goAt); err != ErrNotRacing {
 		t.Errorf("a watcher reported progress: %v", err)
 	}
 
@@ -348,5 +348,110 @@ func TestHeadlessRoomPromotes(t *testing.T) {
 	r.Promote()
 	if !r.IsHost(b) {
 		t.Error("the controls were not handed on")
+	}
+}
+
+func TestKeysRejectAbsurdTimes(t *testing.T) {
+	var k Keys
+	if err := json.Unmarshal([]byte(`[[100000000000,97,0]]`), &k); err == nil {
+		t.Error("a key three years into the round was accepted")
+	}
+	if err := json.Unmarshal([]byte(`[[3599000,97,0]]`), &k); err != nil {
+		t.Errorf("a key just under an hour in was refused: %v", err)
+	}
+}
+
+// A finish is judged by when it arrives as well as by what it claims, in both
+// directions, and the claim is checked before anything is replayed.
+func TestFinishTimeMustMatchWhenItArrives(t *testing.T) {
+	r := NewRoom("h", "", Setup{Mode: ModeWords, Words: 10, List: "1k"})
+	host, _ := r.Join("h", true)
+	r.Begin(host, text, "", 0)
+	r.Tick(Countdown)
+	keys := typeOut(text, 100*time.Millisecond) // 1.3s of typing
+
+	// Claiming 1.3s but arriving 20s in: the time was made up.
+	if err := r.Finish(host, 1, keys, Countdown+20*time.Second); err != ErrUnfinished {
+		t.Errorf("a finish far slower than its claim was believed: %v", err)
+	}
+	// One key stamped absurdly late must be refused without being scored.
+	huge := append(Keys(nil), keys...)
+	huge[len(huge)-1].At = MaxKeyTime
+	done := make(chan error, 1)
+	go func() { done <- r.Finish(host, 1, huge, Countdown+2*time.Second) }()
+	select {
+	case err := <-done:
+		if err != ErrUnfinished {
+			t.Errorf("an absurd finish time was accepted: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("an absurd finish time was replayed before being checked")
+	}
+	if err := r.Finish(host, 1, keys, Countdown+1500*time.Millisecond); err != nil {
+		t.Errorf("an honest finish was refused: %v", err)
+	}
+}
+
+func TestWinnerWhoLeavesKeepsTheWin(t *testing.T) {
+	r := NewRoom("h", "", Setup{Mode: ModeWords, Words: 10, List: "1k"})
+	host, _ := r.Join("h", true)
+	quick, _ := r.Join("quick", false)
+	r.Begin(host, text, "", 0)
+	r.Tick(Countdown)
+	r.Finish(quick, 1, typeOut(text, 80*time.Millisecond), Countdown+1100*time.Millisecond)
+	r.Leave(quick) // won, then closed the terminal
+	r.Finish(host, 1, typeOut(text, 150*time.Millisecond), Countdown+2*time.Second)
+	if !r.Tick(Countdown + 2*time.Second) {
+		t.Fatal("round did not close")
+	}
+	s := r.Results().Standings
+	if len(s) != 2 || s[0].ID != quick || s[0].Place != 1 || s[1].Place != 2 {
+		t.Fatalf("the winner who left lost the win: %+v", s)
+	}
+	if len(r.Results().Keys[quick]) == 0 {
+		t.Error("the winner's replay was lost")
+	}
+}
+
+func TestIdleRacerIsCountedOut(t *testing.T) {
+	r := NewRoom("h", "", Setup{Mode: ModeWords, Words: 10, List: "1k"})
+	host, _ := r.Join("h", true)
+	afk, _ := r.Join("afk", false)
+	r.Begin(host, text, "", 0)
+	r.Tick(Countdown)
+	// The host keeps typing, slowly; afk never presses a key.
+	for at := Countdown; at < Countdown+idleLimit; at += 10 * time.Second {
+		r.Report(host, 1, Progress{Done: 0.1}, at)
+		r.Tick(at)
+	}
+	r.Tick(Countdown + idleLimit + time.Second)
+	for _, p := range r.State().Players {
+		if p.ID == afk && !p.Out {
+			t.Error("a racer who never typed is still holding the round open")
+		}
+		if p.ID == host && p.Out {
+			t.Error("a racer who was typing was counted out")
+		}
+	}
+}
+
+func TestSeatsFreeWhenSomeoneLeavesMidRound(t *testing.T) {
+	r := NewRoom("h", "", Setup{Mode: ModeWords, Words: 10, List: "1k"})
+	host, _ := r.Join("h", true)
+	var last int
+	for i := 1; i < MaxPlayers; i++ {
+		last, _ = r.Join("p", false)
+	}
+	r.Begin(host, text, "", 0)
+	r.Leave(last)
+	if _, err := r.Join("new", false); err != nil {
+		t.Errorf("a seat left mid-round was not freed: %v", err)
+	}
+}
+
+func TestUnknownSetupHasNoLabel(t *testing.T) {
+	bad := Setup{Mode: ModeQuotes, Length: "\x1b]52;c;x\x07"}
+	if got := bad.Label(); got != "race" {
+		t.Errorf("an unknown setup was labelled %q", got)
 	}
 }

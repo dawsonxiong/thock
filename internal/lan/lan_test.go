@@ -221,3 +221,115 @@ func TestVersionMismatchIsTurnedAway(t *testing.T) {
 		t.Errorf("got %+v, want a rejection that says what to do", m)
 	}
 }
+
+// Closing a room while a racer's messages are still arriving must not crash
+// the host: a message read just before the close still gets handled, and its
+// reply must not go to a connection that is already shut.
+func TestCloseWhileMessagesArrive(t *testing.T) {
+	for i := 0; i < 30; i++ {
+		srv, err := Host(HostConfig{Name: "h", Setup: race.Setup{Mode: race.ModeWords, Words: 10, List: "1k"},
+			Text: func(race.Setup) ([]string, string, error) { return []string{"a"}, "", nil }})
+		if err != nil {
+			t.Fatal(err)
+		}
+		c, err := Dial(context.Background(), srv.LocalAddr(), "g", "")
+		if err != nil {
+			srv.Close()
+			t.Fatal(err)
+		}
+		stop := make(chan struct{})
+		go func() {
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				if c.Send(race.Msg{T: race.MsgPing, Sent: 1}) != nil {
+					return
+				}
+			}
+		}()
+		time.Sleep(time.Millisecond)
+		srv.Close()
+		close(stop)
+		c.Close()
+	}
+}
+
+// A connection that never says hello, or joins as the room closes, must not
+// keep the room from closing: the host's screen waits on it.
+func TestCloseDoesNotWaitOnConnections(t *testing.T) {
+	srv, err := Host(HostConfig{Name: "h", Setup: race.Setup{Mode: race.ModeWords, Words: 10, List: "1k"},
+		Text: func(race.Setup) ([]string, string, error) { return []string{"a"}, "", nil }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	silent, err := net.Dial("tcp4", srv.LocalAddr())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer silent.Close()
+	guest, err := Dial(context.Background(), srv.LocalAddr(), "g", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer guest.Close()
+	time.Sleep(50 * time.Millisecond)
+
+	done := make(chan struct{})
+	go func() {
+		srv.Close()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("closing the room waited on a connection")
+	}
+	if _, err := Dial(context.Background(), srv.LocalAddr(), "late", ""); err == nil {
+		t.Error("joined a closed room")
+	}
+}
+
+// Someone joining between rounds learns what the last round was before they
+// are shown its results.
+func TestLateJoinerGetsStateBeforeResults(t *testing.T) {
+	words := []string{"a", "b"}
+	srv, err := Host(HostConfig{Name: "h", Setup: race.Setup{Mode: race.ModeWords, Words: 10, List: "1k"},
+		Text: func(race.Setup) ([]string, string, error) { return words, "", nil }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+	host, err := Dial(context.Background(), srv.LocalAddr(), "h", srv.Token())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer host.Close()
+	host.Send(race.Msg{T: race.MsgStart})
+	st := recv(t, host, race.MsgStart).Start
+	time.Sleep(time.Until(host.Local(st.GoAt)) + 100*time.Millisecond)
+	host.Send(race.Msg{T: race.MsgFinish, Round: 1, Keys: typed(words)})
+	recv(t, host, race.MsgResults)
+
+	late, err := Dial(context.Background(), srv.LocalAddr(), "late", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer late.Close()
+	var order []string
+	for len(order) < 3 {
+		select {
+		case m := <-late.Msgs():
+			if m.T == race.MsgState || m.T == race.MsgStart || m.T == race.MsgResults {
+				order = append(order, m.T)
+			}
+		case <-time.After(3 * time.Second):
+			t.Fatalf("got only %v", order)
+		}
+	}
+	if order[0] != race.MsgState || order[1] != race.MsgStart || order[2] != race.MsgResults {
+		t.Errorf("late joiner got %v, want state, start, results", order)
+	}
+}

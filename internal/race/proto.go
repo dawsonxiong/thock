@@ -144,9 +144,14 @@ type Key struct {
 // the replay.
 type Keys []Key
 
-// MaxKeys bounds a log a guest may send. It is far beyond any real race, and
-// keeps a hostile guest from making the host replay an endless one.
-const MaxKeys = 20000
+// MaxKeys bounds a log a guest may send, and MaxKeyTime how late in a round
+// a key may be. Both are far beyond any real race. Scoring works second by
+// second, so without them one key stamped a year in would make every machine
+// that scores it allocate a slot for each of those seconds.
+const (
+	MaxKeys    = 20000
+	MaxKeyTime = time.Hour
+)
 
 func (k Keys) MarshalJSON() ([]byte, error) {
 	out := make([][3]int64, len(k))
@@ -166,7 +171,7 @@ func (k *Keys) UnmarshalJSON(b []byte) error {
 	}
 	out := make(Keys, len(in))
 	for i, x := range in {
-		if len(x) != 3 || x[0] < 0 || x[1] < 0 || x[1] > 0x10FFFF || x[2] < 0 || x[2] > int64(typing.KeyDeleteWord) {
+		if len(x) != 3 || x[0] < 0 || x[0] > MaxKeyTime.Milliseconds() || x[1] < 0 || x[1] > 0x10FFFF || x[2] < 0 || x[2] > int64(typing.KeyDeleteWord) {
 			return errors.New("malformed keystroke")
 		}
 		out[i] = Key{At: time.Duration(x[0]) * time.Millisecond, R: rune(x[1]), Kind: typing.KeyKind(x[2])}

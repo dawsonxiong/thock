@@ -59,6 +59,11 @@ type Server struct {
 	room  *race.Room
 	peers map[int]*peer
 	sent  uint64 // the room version last broadcast
+	// conns is every open connection, joined or still saying hello, so
+	// closing the room can cut them all; closed refuses any that arrive
+	// after.
+	conns  map[net.Conn]struct{}
+	closed bool
 
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
@@ -70,6 +75,11 @@ type peer struct {
 	conn net.Conn
 	out  chan []byte
 	once sync.Once
+	// gone is set, with the server's lock held, before out is closed.
+	// Every send also holds the lock and checks it, so nothing is ever sent
+	// on a closed outbox, including a reply to a message read just before
+	// the room closed.
+	gone bool
 }
 
 func (p *peer) close() {
@@ -110,6 +120,7 @@ func Host(cfg HostConfig) (*Server, error) {
 		headless: cfg.Headless,
 		room:     race.NewRoom(cfg.Name, code, cfg.Setup),
 		peers:    map[int]*peer{},
+		conns:    map[net.Conn]struct{}{},
 		cancel:   cancel,
 	}
 	s.wg.Add(2)
@@ -158,9 +169,14 @@ func (s *Server) Close() {
 		s.cancel()
 		s.ln.Close()
 		s.mu.Lock()
+		s.closed = true
 		for id, p := range s.peers {
+			p.gone = true
 			p.close()
 			delete(s.peers, id)
+		}
+		for c := range s.conns {
+			c.Close()
 		}
 		s.mu.Unlock()
 		s.wg.Wait()
@@ -176,10 +192,21 @@ func (s *Server) accept() {
 		if err != nil {
 			return
 		}
+		s.mu.Lock()
+		if s.closed {
+			s.mu.Unlock()
+			c.Close()
+			return
+		}
+		s.conns[c] = struct{}{}
+		s.mu.Unlock()
 		s.wg.Add(1)
 		go func() {
 			defer s.wg.Done()
 			s.serve(c)
+			s.mu.Lock()
+			delete(s.conns, c)
+			s.mu.Unlock()
 		}()
 	}
 }
@@ -207,6 +234,11 @@ func (s *Server) serve(c net.Conn) {
 	c.SetReadDeadline(time.Time{})
 
 	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		c.Close()
+		return
+	}
 	host := hello.Token != "" && hello.Token == s.token
 	if s.headless && !s.room.HasHost() {
 		host = true
@@ -221,15 +253,18 @@ func (s *Server) serve(c net.Conn) {
 	s.peers[id] = p
 	s.wg.Add(1)
 	go s.write(p)
-	s.send(p, race.Msg{T: race.MsgWelcome, V: race.Version, ID: id})
+	// The welcome carries the host's clock, so the guest's clock is roughly
+	// aligned from its very first message; pings then tighten it.
+	s.send(p, race.Msg{T: race.MsgWelcome, V: race.Version, ID: id, At: race.Ms(s.now())})
+	s.broadcastState()
 	// Someone arriving between rounds can replay the last one with everyone
-	// else, so they get its text and results too.
+	// else, so they get its text and results too, after the state that says
+	// what it was.
 	if ph := s.room.Phase(); ph == race.PhaseResults {
 		st := s.room.Start()
 		s.send(p, race.Msg{T: race.MsgStart, Start: &st})
 		s.send(p, race.Msg{T: race.MsgResults, Results: s.room.Results()})
 	}
-	s.broadcastState()
 	s.mu.Unlock()
 
 	for {
@@ -243,6 +278,7 @@ func (s *Server) serve(c net.Conn) {
 	}
 
 	s.mu.Lock()
+	p.gone = true
 	delete(s.peers, id)
 	s.room.Leave(id)
 	if s.headless {
@@ -285,7 +321,7 @@ func (s *Server) handle(p *peer, m race.Msg) {
 		s.broadcastState()
 	case race.MsgProgress:
 		if m.Progress != nil {
-			s.room.Report(p.id, m.Round, *m.Progress)
+			s.room.Report(p.id, m.Round, *m.Progress, now)
 		}
 	case race.MsgFinish:
 		if s.room.Finish(p.id, m.Round, m.Keys, now) == nil {
@@ -343,7 +379,11 @@ func (s *Server) send(p *peer, m race.Msg) {
 }
 
 // queue hands a message to a peer's writer without ever blocking the room.
+// The lock is held.
 func (s *Server) queue(p *peer, b []byte) {
+	if p.gone {
+		return
+	}
 	select {
 	case p.out <- b:
 	default:

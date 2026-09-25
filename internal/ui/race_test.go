@@ -164,6 +164,27 @@ func TestRaceFromLobbyToPodium(t *testing.T) {
 	}
 }
 
+// Every key must mean the same here as in the host's replay of it, or a finish
+// on this screen would not count there.
+func TestRaceKeysMatchTheHostsReplay(t *testing.T) {
+	m, _ := newRaceModel(t)
+	pump(t, m, func() bool { return len(m.race.st.Players) == 2 })
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	pump(t, m, func() bool { return m.screen == screenRace && allRacing(m) })
+	m.race.goAt = time.Now().Add(-2 * time.Second)
+	m.Update(raceTickMsg{m.race})
+
+	press(m, "alpha\u00a0beta") // option+space on a Mac
+	press(m, "\u200b")          // a zero-width space
+	if m.eng.WordIdx != 1 || string(m.eng.Words[1].Typed) != "beta" {
+		t.Fatalf("typed %q into word %d", string(m.eng.Words[m.eng.WordIdx].Typed), m.eng.WordIdx)
+	}
+	keys := race.FromLog(m.eng.Log)
+	if len(keys.Clean()) != len(keys) {
+		t.Error("the screen typed a key the host would drop")
+	}
+}
+
 func TestGhostsDoNotChangeTheText(t *testing.T) {
 	m, _ := newRaceModel(t)
 	pump(t, m, func() bool { return len(m.race.st.Players) == 2 })
@@ -217,6 +238,21 @@ func textLine(screen string) string {
 		}
 	}
 	return ""
+}
+
+func TestHostSetupIsCheckedBeforeItIsDrawn(t *testing.T) {
+	m, _ := newRaceModel(t)
+	pump(t, m, func() bool { return len(m.race.st.Players) == 2 })
+	good := m.race.st.Setup
+	st := m.race.st
+	st.Setup = race.Setup{Mode: race.ModeQuotes, Length: "\x1b]52;c;aGk=\x07"}
+	m.Update(netMsg{m.race, race.Msg{T: race.MsgState, State: &st}})
+	if m.race.st.Setup != good {
+		t.Errorf("a bad setup replaced %+v with %+v", good, m.race.st.Setup)
+	}
+	if strings.Contains(m.View().Content, "\x1b]52") {
+		t.Error("an escape sequence from the host reached the screen")
+	}
 }
 
 func TestBrowseTakesACode(t *testing.T) {

@@ -16,9 +16,15 @@ const (
 	// minGrace is the least time anyone still racing gets once the first racer
 	// is over the line.
 	minGrace = 15 * time.Second
-	// lateTolerance is how far a racer's own finish time may run past the
-	// host's clock before it is disbelieved.
-	lateTolerance = 2 * time.Second
+	// finishTolerance is how far a racer's own finish time may differ from
+	// when the host hears about it. A racer's screen sends its keys the
+	// moment the line is crossed, so on a LAN the two agree to within a few
+	// milliseconds; a claim far from that is disbelieved either way.
+	finishTolerance = 2 * time.Second
+	// idleLimit is how long a racer can go without a keystroke before they
+	// are counted out, so one person who walked away cannot hold a round
+	// open for everyone else.
+	idleLimit = 60 * time.Second
 )
 
 var (
@@ -37,6 +43,9 @@ type member struct {
 	keys Keys
 	res  Standing
 	left bool // gone from the room, kept only until the round closes
+	// heard is the last time, on the host's clock, the racer's position
+	// moved during a round.
+	heard time.Duration
 }
 
 // Room is the host's authoritative view of a race. It is not safe for
@@ -106,7 +115,13 @@ func (r *Room) find(id int) *member {
 // two people called sam can still tell their lanes apart. Someone arriving
 // mid-round watches from the lobby and races from the next round.
 func (r *Room) Join(name string, host bool) (int, error) {
-	if len(r.members) >= MaxPlayers {
+	seated := 0
+	for _, m := range r.members {
+		if !m.left {
+			seated++
+		}
+	}
+	if seated >= MaxPlayers {
 		return 0, ErrFull
 	}
 	name = r.unique(CleanName(name))
@@ -137,15 +152,16 @@ func (r *Room) unique(name string) string {
 	}
 }
 
-// Leave removes a player. Someone who leaves mid-round keeps their lane,
-// marked out, so the standings still show they were there.
+// Leave removes a player. Someone who leaves mid-round keeps their lane until
+// it closes, so the standings still show they were there: out if they had not
+// finished, and with their result if they had.
 func (r *Room) Leave(id int) {
 	for i, m := range r.members {
 		if m.ID != id {
 			continue
 		}
-		if m.Racing && (r.phase == PhaseCountdown || r.phase == PhaseRacing) && !m.Finished {
-			m.Out = true
+		if m.Racing && (r.phase == PhaseCountdown || r.phase == PhaseRacing) {
+			m.Out = m.Out || !m.Finished
 			m.left = true
 		} else {
 			r.members = append(r.members[:i], r.members[i+1:]...)
@@ -229,6 +245,7 @@ func (r *Room) Begin(id int, words []string, source string, now time.Duration) (
 		m.Player = Player{ID: m.ID, Name: m.Name, Host: m.Host, Wins: m.Wins, Racing: true}
 		m.keys = nil
 		m.res = Standing{}
+		m.heard = r.goAt
 	}
 	r.touch()
 	return r.Start(), nil
@@ -252,11 +269,12 @@ func (r *Room) racer(id, round int) (*member, error) {
 }
 
 // Report updates a racer's live position.
-func (r *Room) Report(id, round int, p Progress) error {
+func (r *Room) Report(id, round int, p Progress, now time.Duration) error {
 	m, err := r.racer(id, round)
 	if err != nil || m.Finished {
 		return err
 	}
+	m.heard = max(m.heard, now)
 	m.Word, m.Char = max(0, p.Word), max(0, p.Char)
 	m.Done = min(max(p.Done, 0), 0.999) // only the keys can say it is finished
 	m.WPM = min(max(p.WPM, 0), 999)
@@ -272,18 +290,18 @@ func (r *Room) Finish(id, round int, keys Keys, now time.Duration) error {
 	if err != nil {
 		return err
 	}
-	if m.Finished {
+	if m.Finished || len(keys) == 0 {
 		return nil
 	}
 	keys = keys.Clean()
-	res, finished := Score(r.words, keys)
-	if !finished {
+	// The time is checked before anything is replayed: scoring allocates by
+	// the second, so an absurd time must never reach it.
+	took := keys[len(keys)-1].At
+	if took <= 0 || (r.goAt+took-now).Abs() > finishTolerance {
 		return ErrUnfinished
 	}
-	took := keys[len(keys)-1].At
-	// A finish time later than the host's own clock allows is not believable,
-	// and one before the start is not possible.
-	if took <= 0 || r.goAt+took > now+lateTolerance {
+	res, finished := Score(r.words, keys)
+	if !finished {
 		return ErrUnfinished
 	}
 	m.Finished = true
@@ -332,6 +350,12 @@ func (r *Room) Tick(now time.Duration) bool {
 			r.touch()
 		}
 	case PhaseRacing:
+		for _, m := range r.members {
+			if m.Racing && !m.Finished && !m.Out && now-m.heard > idleLimit {
+				m.Out = true
+				r.touch()
+			}
+		}
 		if r.allIn() || (r.firstIn > 0 && now >= r.firstIn+r.grace) {
 			r.close()
 			return true
