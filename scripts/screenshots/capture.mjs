@@ -28,6 +28,9 @@ const THEME = "tokyonight";
 const WEBP_WIDTH = 1600;
 // Tokyo Night's window colours, so the frame matches the theme.
 const WINDOW = { background: "#1a1b26", foreground: "#c0caf5", cursor: "#7aa2f7" };
+// Chromium on Linux measures JetBrains Mono's cell taller than Chrome on macOS; LINE_HEIGHT=1.125
+// there gives the same rows as the published shots.
+const LINE_HEIGHT = Number(process.env.LINE_HEIGHT ?? 1.25);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
@@ -40,13 +43,15 @@ execFileSync("go", ["build", "-o", BIN, "."], { cwd: REPO, stdio: "inherit" });
 fs.mkdirSync(OUT, { recursive: true });
 
 // node-pty's prebuilt spawn-helper arrives without its executable bit when install scripts are
-// skipped, and every spawn then fails with "posix_spawnp failed".
+// skipped, and every spawn then fails with "posix_spawnp failed". Only macOS uses one.
 const ptyDir = path.dirname(createRequire(import.meta.url).resolve("node-pty/package.json"));
-fs.chmodSync(path.join(ptyDir, "prebuilds", `${process.platform}-${process.arch}`, "spawn-helper"), 0o755);
+const helper = path.join(ptyDir, "prebuilds", `${process.platform}-${process.arch}`, "spawn-helper");
+if (fs.existsSync(helper)) fs.chmodSync(helper, 0o755);
 
 // The terminal page.
 const mod = (p) => fs.readFileSync(path.join(HERE, "node_modules", p), "utf8");
-const browser = await chromium.launch({ channel: "chrome", headless: true });
+// CHROME points at a Chromium build when Google Chrome is not installed.
+const browser = await chromium.launch(process.env.CHROME ? { executablePath: process.env.CHROME, headless: true } : { channel: "chrome", headless: true });
 const page = await (await browser.newContext({ viewport: { width: 1180, height: 560 }, deviceScaleFactor: 2 })).newPage();
 await page.setContent(`<!doctype html><html><head><style>${mod("@xterm/xterm/css/xterm.css")}
   html,body{margin:0;background:#0b0c14;height:100%}
@@ -57,7 +62,7 @@ await page.setContent(`<!doctype html><html><head><style>${mod("@xterm/xterm/css
 <script>${mod("@xterm/xterm/lib/xterm.js")}</script>
 <script>${mod("@xterm/addon-canvas/lib/addon-canvas.js")}</script>
 <script>
-  const term = new Terminal({ cols: ${COLS}, rows: ${ROWS}, fontFamily: '"JetBrains Mono", Menlo, monospace', fontSize: 15, lineHeight: 1.25, customGlyphs: true, cursorBlink: false, cursorStyle: "bar", theme: ${JSON.stringify(WINDOW)} });
+  const term = new Terminal({ cols: ${COLS}, rows: ${ROWS}, fontFamily: '"JetBrains Mono", Menlo, monospace', fontSize: 15, lineHeight: ${LINE_HEIGHT}, customGlyphs: true, cursorBlink: false, cursorStyle: "bar", theme: ${JSON.stringify(WINDOW)} });
   term.open(document.getElementById("t"));
   // The DOM renderer draws block elements from the font, which leaves a gap per row at this line
   // height; the canvas renderer draws them as custom glyphs that fill the whole cell.

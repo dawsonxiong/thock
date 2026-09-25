@@ -13,7 +13,7 @@ gofmt -l .
 
 Requires Go 1.25+. Module: `github.com/dawsonxiong/thock`.
 
-Portfolio screenshots: `cd scripts/screenshots && pnpm install && pnpm capture` (see its README).
+Portfolio screenshots: `cd scripts/screenshots && pnpm install && pnpm capture` (and `pnpm capture:race`; see its README).
 
 ```sh
 thock                     # 30s test, 1k word list
@@ -21,12 +21,13 @@ thock --time 60
 thock --words 50
 thock --mode quotes
 thock stats
+thock race                # rooms on the LAN; race host / race join <code>
 ```
 
 ## Stack
 
 - Charm Bubble Tea v2 (`charm.land/bubbletea/v2`), Lipgloss v2, cobra, fang.
-- Layout: thin `main.go`, logic in `internal/`.
+- Layout: thin `main.go`, logic in `internal/`. Racing: `internal/race` is the pure core (protocol, room, scoring), `internal/lan` the sockets.
 - Follow the `go-cli` house skill.
 
 ## Hard rules
