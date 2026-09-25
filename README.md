@@ -7,6 +7,7 @@ Monkeytype, straight in your terminal. It uses the same scoring formulas, so you
 ## Features
 
 - Time, words and quotes modes, with a 1k or 5k word list
+- Race people on your network, with everyone's cursor shown live in your own text
 - wpm, raw, accuracy and consistency, calculated the way Monkeytype does it
 - A stats screen with your run history, trend lines and personal bests
 - 10 themes, plus `NO_COLOR` support
@@ -46,6 +47,7 @@ thock --mode quotes       # a famous line from a film, book or show
 thock --list 5k           # wider vocabulary
 thock --theme gruvbox     # see `thock themes`
 thock stats               # personal bests and recent runs
+thock race                # find a race on your network, or host one
 ```
 
 If you pass `--time` or `--words` you don't need `--mode` as well.
@@ -58,6 +60,7 @@ If you pass `--time` or `--words` you don't need `--mode` as well.
 | `enter` | new text (on the results screen) |
 | `tab` | options (`enter` to apply and restart, `esc` to back out) |
 | `ctrl+s` | stats (`←→` to filter, `esc` to go back) |
+| `ctrl+r` | race (see [Racing](#racing)) |
 | `ctrl+w` | delete the last word |
 | `ctrl+c` | quit |
 
@@ -72,6 +75,37 @@ Typing on the results screen doesn't do anything, so an extra keystroke after yo
 Each bar is one run, with a smoothed average underneath. Accuracy and consistency get their own sparklines, each labelled with its own min and max, and the table at the bottom has your bests and averages for each setup. `←→` switches between the setups you've played. Runs are only compared with the same setup, so a 30s run won't count toward your 60s bests.
 
 `thock stats` prints the same numbers without opening the UI.
+
+## Racing
+
+Race anyone on the same network, each in their own terminal. One person hosts and the others join:
+
+```sh
+thock race host --words 25    # open a room: 10, 25, 50 or 100 words, or --quote short
+thock race join velvet-orbit  # join by the room's code...
+thock race join 192.168.1.20  # ...or its address
+thock race                    # list the rooms on your network and pick one
+```
+
+Rooms announce themselves on the local network, so `thock race` usually finds them without typing anything. Every room also has a two-word code that spells its address, which still works on networks that block the announcements (guest Wi-Fi often does). `--name` sets the name other racers see, and thock remembers it.
+
+![A race in progress: three lanes with pace trails above the text, and the other two racers' cursors shown as coloured blocks inside the words](docs/screenshots/race-typing.webp)
+
+- **Everyone's cursor is in your text.** The other racers show up as coloured blocks on the letter they're typing, so you can see someone two words ahead of you without looking away from the words.
+- **Lanes show pace, not just position.** Each lane's trail is shaded by how fast that racer was typing at that point in the text, so you can see where a lead came from.
+- **The words stay hidden until zero.** The countdown shows only the shape of the text, and keys pressed early are ignored.
+- **A time gap, not a character count.** The status line shows how long ago the racer ahead of you was where you are now, like the time gaps in a cycling race.
+- **Replays.** Press `r` on the results screen to watch the whole race again at 2×, with every cursor moving through the text.
+
+| Lobby | Results |
+| :-: | :-: |
+| <img src="docs/screenshots/race-lobby.webp" alt="The race lobby: the thock banner, the race setup, three racers and the command to join" width="400"> | <img src="docs/screenshots/race-podium.webp" alt="Race results: places, wpm, accuracy and finishing times, each racer's pace on a shared clock, and a running tally of wins" width="400"> |
+
+The host picks the setup with `←→` and starts each round with `enter`. Anyone can press `esc` to give up a round or leave the room. A room holds up to eight racers, and anyone who arrives mid-round races in the next one.
+
+Everyone's finishing time is measured on their own machine from a shared start, so network lag doesn't decide who wins. The host scores every run from its keystrokes with the same formulas as a solo test. A race counts toward your personal bests like any other words or quote test.
+
+`thock race host --headless` runs a room with no screen, for a spare machine to hold. The first person to join gets the host controls.
 
 ## Scoring
 
@@ -111,10 +145,10 @@ A frame at 120 FPS is 8.3 ms, so a keystroke uses about 1/2000th of it.
 
 | Path | |
 |---|---|
-| `~/.config/thock/config.toml` | theme and last-used test settings |
+| `~/.config/thock/config.toml` | theme, last-used test settings and your race name |
 | `~/.local/share/thock/results.jsonl` | one JSON object per finished test |
 
-Both respect `XDG_CONFIG_HOME` and `XDG_DATA_HOME`. Results are plain JSONL and stay on your machine.
+Both respect `XDG_CONFIG_HOME` and `XDG_DATA_HOME`. Results are plain JSONL and stay on your machine. Racing uses TCP on ports 47300–47307 and multicast on `239.255.77.77:47777`, and only talks to machines on your network.
 
 ## Not affiliated with Monkeytype
 
