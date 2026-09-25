@@ -15,6 +15,7 @@ import (
 func (m *Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if msg.String() == "ctrl+c" {
 		m.quitting = true
+		m.Close()
 		return m, tea.Quit
 	}
 	if m.err != nil {
@@ -29,6 +30,12 @@ func (m *Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.onStatsKey(msg)
 	case screenResults:
 		return m.onResultsKey(msg)
+	case screenBrowse:
+		return m.onBrowseKey(msg)
+	case screenLobby, screenPodium:
+		return m.onLobbyKey(msg)
+	case screenRace:
+		return m.onRaceKey(msg)
 	}
 	return m.onTestKey(msg)
 }
@@ -68,6 +75,12 @@ func (m *Model) onTestKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// mid-flow, so opening stats would silently cost the run.
 		if !m.running {
 			m.openStats()
+		}
+		return m, nil
+	case "ctrl+r":
+		// Like stats, racing is only offered between tests.
+		if !m.running {
+			return m, m.openBrowse()
 		}
 		return m, nil
 	// Terminals without key disambiguation report ctrl+backspace as one of
@@ -146,6 +159,8 @@ func (m *Model) onResultsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.optRow = 0
 	case "ctrl+s":
 		m.openStats()
+	case "ctrl+r":
+		return m, m.openBrowse()
 	}
 	return m, nil
 }

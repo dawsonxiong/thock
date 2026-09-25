@@ -16,6 +16,22 @@ import (
 // single escape sequence between them, so a typical row costs a handful of
 // writes rather than one per character.
 func Line(e *typing.Engine, l layout.Line, tbl *theme.Table, b *strings.Builder) {
+	Marked(e, l, tbl, nil, b)
+}
+
+// Mark paints one cell of the text in a style of its own: in a race, where
+// another racer's caret is. Sep marks the space after the word rather than a
+// character in it.
+type Mark struct {
+	Word, Char int
+	Sep        bool
+	Style      string
+}
+
+// Marked renders a row like Line, with marks drawn over it. A marked cell
+// breaks the run it falls in, so it costs two escape sequences and the rest
+// of the row is unaffected.
+func Marked(e *typing.Engine, l layout.Line, tbl *theme.Table, marks []Mark, b *strings.Builder) {
 	const noState = typing.CharState(255)
 	cur := noState
 
@@ -25,15 +41,36 @@ func Line(e *typing.Engine, l layout.Line, tbl *theme.Table, b *strings.Builder)
 		}
 		cur = noState
 	}
+	mark := func(word, char int, sep bool) string {
+		for _, m := range marks {
+			if m.Word == word && m.Char == char && m.Sep == sep {
+				return m.Style
+			}
+		}
+		return ""
+	}
 
 	for wi := l.First; wi <= l.Last && wi < len(e.Words); wi++ {
 		if wi > l.First {
 			closeRun()
-			b.WriteByte(' ')
+			if st := mark(wi-1, 0, true); st != "" {
+				b.WriteString(st + " " + tbl.Reset)
+			} else {
+				b.WriteByte(' ')
+			}
 		}
 		runes := e.Runes(wi)
 		states := e.States(wi)
 		for i, r := range runes {
+			if len(marks) > 0 {
+				if st := mark(wi, i, false); st != "" {
+					closeRun()
+					b.WriteString(st)
+					b.WriteRune(r)
+					b.WriteString(tbl.Reset)
+					continue
+				}
+			}
 			s := states[i]
 			if s != cur {
 				closeRun()
@@ -46,6 +83,22 @@ func Line(e *typing.Engine, l layout.Line, tbl *theme.Table, b *strings.Builder)
 		}
 	}
 	closeRun()
+}
+
+// Hidden renders a row with every word blanked to a bar of its own width, so
+// the shape of the text shows before the words do. The layout is the same as
+// the real text, so nothing moves when it is revealed.
+func Hidden(e *typing.Engine, l layout.Line, tbl *theme.Table, b *strings.Builder) {
+	b.WriteString(tbl.Char[typing.CharPending])
+	for wi := l.First; wi <= l.Last && wi < len(e.Words); wi++ {
+		if wi > l.First {
+			b.WriteByte(' ')
+		}
+		b.WriteString(strings.Repeat("▁", e.Words[wi].Width()))
+	}
+	if tbl.Char[typing.CharPending] != "" {
+		b.WriteString(tbl.Reset)
+	}
 }
 
 // Cache holds rendered rows between frames. A keystroke only ever changes the
