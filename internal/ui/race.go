@@ -223,6 +223,11 @@ func (m *Model) onNet(s *session, msg race.Msg) tea.Cmd {
 		for i := range st.Players {
 			st.Players[i].Name = race.CleanName(st.Players[i].Name)
 		}
+		// The setup is drawn in titles, so one that is not a real race
+		// setup never replaces the last good one.
+		if !st.Setup.Valid() {
+			st.Setup = s.st.Setup
+		}
 		s.st = st
 		m.traceOthers(s, now)
 		if me, ok := s.player(s.me); ok && s.round != nil && st.Round == s.round.Round {
@@ -445,10 +450,20 @@ func (m *Model) onRaceKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	default:
 		key := msg.Key()
 		rs := []rune(key.Text)
-		if len(rs) != 1 || unicode.IsControl(rs[0]) {
+		if len(rs) != 1 {
 			return m, nil
 		}
-		r = rs[0]
+		// Every key has to mean the same thing on the host's replay as it
+		// does here, or a finish on this screen is not a finish there. So a
+		// key is typed only if the host would keep it: any kind of space is
+		// the space bar (a Mac's option+space is a non-breaking one), and
+		// anything unprintable is dropped.
+		switch r = rs[0]; {
+		case unicode.IsSpace(r):
+			r = ' '
+		case !unicode.IsPrint(r):
+			return m, nil
+		}
 	}
 	if now.Before(s.goAt) {
 		// A key before zero is a jump start: it is ignored, and said so.

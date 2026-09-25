@@ -51,8 +51,12 @@ func (s Setup) Valid() bool {
 	return false
 }
 
-// Label names a setup the way the rest of thock does.
+// Label names a setup the way the rest of thock does. A setup that is not a
+// preset has no name, since its fields may have come from anywhere.
 func (s Setup) Label() string {
+	if !s.Valid() {
+		return "race"
+	}
 	if s.Mode == ModeQuotes {
 		if s.Length == "" || s.Length == "any" {
 			return "quote"

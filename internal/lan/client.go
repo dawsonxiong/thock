@@ -48,6 +48,7 @@ func Dial(ctx context.Context, addr, name, token string) (*Client, error) {
 		return nil, fmt.Errorf("no room answered at %s", addr)
 	}
 	c := &Client{conn: conn, epoch: time.Now(), in: make(chan race.Msg, 64), done: make(chan struct{})}
+	sent := time.Since(c.epoch)
 	if err := c.Send(race.Msg{T: race.MsgHello, V: race.Version, Name: name, Token: token}); err != nil {
 		conn.Close()
 		return nil, err
@@ -64,6 +65,7 @@ func Dial(ctx context.Context, addr, name, token string) (*Client, error) {
 	switch m.T {
 	case race.MsgWelcome:
 		c.id = m.ID
+		c.clock.Observe(sent, race.Dur(m.At), time.Since(c.epoch))
 	case race.MsgReject:
 		conn.Close()
 		return nil, fmt.Errorf("the room turned you away: %s", race.CleanLine(m.Reason))
