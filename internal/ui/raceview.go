@@ -504,6 +504,7 @@ func (m *Model) lobbyRows(box int) []string {
 			"esc leave")
 	case s.host():
 		hint = fit(box-layout.Width(leftPlain)-2,
+			"←→ setup · tab list · enter start · esc leave",
 			"←→ setup · enter start · esc leave",
 			"enter start · esc leave")
 	default:
@@ -591,7 +592,7 @@ func (m *Model) podiumRows(box int) []string {
 	}
 
 	if pace := m.paceRows(box, nameW); len(pace) > 0 {
-		rows = append(rows, "", m.spread(box, "pace", "raw wpm, one clock for everyone"))
+		rows = append(rows, "", m.paint(m.tbl.Text, "pace"))
 		rows = append(rows, pace...)
 	}
 
@@ -609,10 +610,15 @@ func (m *Model) podiumRows(box int) []string {
 		rows = append(rows, "", m.paint(m.tbl.Text, " — "+s.round.Source))
 	}
 
+	// The next round's setup, which the host can change before the rematch.
+	// The title above names the round just raced, so the two can differ.
+	const next = " next  "
+	rows = append(rows, "", m.paint(m.tbl.Dim, next)+m.setupBar(box-layout.Width(next)))
+
 	rows = append(rows, "")
 	if s.host() {
 		rows = append(rows, m.paint(m.tbl.Dim, fit(box,
-			" enter rematch · ←→ setup · r replay · ctrl+s stats · esc leave",
+			" enter rematch · ←→ setup · tab list · r replay · esc leave",
 			" enter rematch · ←→ setup · r replay · esc leave",
 			" enter rematch · r replay · esc leave")))
 	} else {

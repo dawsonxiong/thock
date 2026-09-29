@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/dawsonxiong/thock/internal/content"
 	"github.com/dawsonxiong/thock/internal/history"
 	"github.com/dawsonxiong/thock/internal/lan"
 	"github.com/dawsonxiong/thock/internal/race"
@@ -134,6 +135,14 @@ func (s *session) hostName() string {
 		}
 	}
 	return "the host"
+}
+
+// between reports whether the host's controls are live: no round is under
+// way. The podium counts even before the room's next update says so, since
+// the results that put it on screen arrive first.
+func (m *Model) between() bool {
+	s := m.race
+	return m.screen == screenPodium || (s.st.Phase != race.PhaseCountdown && s.st.Phase != race.PhaseRacing)
 }
 
 // since is time on the round's clock: zero at the start, negative during the
@@ -500,20 +509,22 @@ func (m *Model) onRaceKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 // onLobbyKey handles the lobby and the podium, which share their controls:
-// the host picks the setup and starts, and anyone can leave.
+// the host picks the next round's setup and starts it, and anyone can leave.
 func (m *Model) onLobbyKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	s := m.race
 	switch msg.String() {
 	case "esc":
 		return m, m.leaveRace("")
 	case "enter":
-		if s.host() && s.st.Phase != race.PhaseCountdown && s.st.Phase != race.PhaseRacing {
+		if s.host() && m.between() {
 			s.cl.Send(race.Msg{T: race.MsgStart})
 		}
 	case "left", "h":
 		m.cycleSetup(-1)
 	case "right", "l":
 		m.cycleSetup(+1)
+	case "tab":
+		m.cycleList()
 	case "r":
 		if m.screen == screenPodium && s.results != nil {
 			m.startReplay(s, time.Now())
@@ -526,7 +537,7 @@ func (m *Model) onLobbyKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 func (m *Model) cycleSetup(delta int) {
 	s := m.race
-	if !s.host() || s.st.Phase == race.PhaseCountdown || s.st.Phase == race.PhaseRacing {
+	if !s.host() || !m.between() {
 		return
 	}
 	list := s.st.Setup.List
@@ -542,6 +553,23 @@ func (m *Model) cycleSetup(delta int) {
 	}
 	next := presets[(i+delta+len(presets))%len(presets)]
 	s.st.Setup = next // shown at once; the host's echo confirms it
+	s.cl.Send(race.Msg{T: race.MsgSetup, Setup: &next})
+}
+
+// cycleList switches a words round between the 1k and 5k lists. The choice
+// is kept for when the host steps through the quotes and back.
+func (m *Model) cycleList() {
+	s := m.race
+	if !s.host() || !m.between() || s.st.Setup.Mode != race.ModeWords {
+		return
+	}
+	next := s.st.Setup
+	next.List = "5k"
+	if next.List == s.st.Setup.List {
+		next.List = "1k"
+	}
+	m.opts.List = content.List(next.List)
+	s.st.Setup = next
 	s.cl.Send(race.Msg{T: race.MsgSetup, Setup: &next})
 }
 

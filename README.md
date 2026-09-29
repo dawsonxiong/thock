@@ -101,7 +101,7 @@ Rooms announce themselves on the local network, so `thock race` usually finds th
 | :-: | :-: |
 | <img src="docs/screenshots/race-lobby.webp" alt="The race lobby: the thock banner, the race setup, three racers and the command to join" width="400"> | <img src="docs/screenshots/race-podium.webp" alt="Race results: places, wpm, accuracy and finishing times, each racer's pace on a shared clock, and a running tally of wins" width="400"> |
 
-The host picks the setup with `←→` and starts each round with `enter`. Anyone can press `esc` to give up a round or leave the room. A room holds up to eight racers, and anyone who arrives mid-round races in the next one.
+The host picks the setup with `←→` (and the word list with `tab`) and starts each round with `enter`. The results screen shows the next round's setup too, so the host can change it before the rematch. Anyone can press `esc` to give up a round or leave the room. A room holds up to eight racers, and anyone who arrives mid-round races in the next one.
 
 Everyone's finishing time is measured on their own machine from a shared start, so network lag doesn't decide who wins. The host scores every run from its keystrokes with the same formulas as a solo test. A race counts toward your personal bests like any other words or quote test.
 
