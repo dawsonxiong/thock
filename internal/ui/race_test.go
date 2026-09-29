@@ -162,6 +162,27 @@ func TestRaceFromLobbyToPodium(t *testing.T) {
 	if m.screen != screenPodium {
 		t.Error("esc did not leave the replay")
 	}
+
+	// The host can change the rematch's setup from the podium, and the
+	// podium shows what the next round will be.
+	if !strings.Contains(screenText(m), "next  words 10 25 50 100") {
+		t.Errorf("podium does not show the next round's setup:\n%s", screenText(m))
+	}
+	m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	pump(t, m, func() bool { return m.race.st.Setup.List == "5k" })
+	m.Update(tea.KeyPressMsg{Code: tea.KeyRight})
+	pump(t, m, func() bool { return m.race.st.Setup.Words == 25 })
+	if !strings.Contains(screenText(m), "words 10 · 1k") {
+		t.Error("the title stopped naming the round that was raced")
+	}
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	pump(t, m, func() bool { return m.screen == screenRace && m.race.round.Round == 2 })
+	if n := len(m.race.round.Words); n != len(raceWords) {
+		t.Errorf("round 2 has %d words", n)
+	}
+	if got := m.race.st.Setup; got.Words != 25 || got.List != "5k" {
+		t.Errorf("rematch setup is %+v, want 25 words from the 5k list", got)
+	}
 }
 
 // Every key must mean the same here as in the host's replay of it, or a finish
