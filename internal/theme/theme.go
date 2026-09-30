@@ -40,6 +40,11 @@ type Theme struct {
 	Text   Style // ordinary interface text
 	Dim    Style // metadata, hints, inactive options
 	Accent Style // live figures, active option, headline
+
+	// Racers colour the other players in a race, in order of arrival. None
+	// of them is the accent, which always means you, or the red that means
+	// a mistake.
+	Racers [6]Colour
 }
 
 // Table is a resolved theme: ready-to-write escape sequences indexed by the
@@ -50,6 +55,11 @@ type Table struct {
 	Dim    string
 	Accent string
 	Reset  string
+
+	// Racer paints another player's name and lane, and Ghost their caret in
+	// your text: the character they are on, drawn as a block of their colour.
+	Racer [6]string
+	Ghost [6]string
 }
 
 const reset = "\x1b[0m"
@@ -70,6 +80,16 @@ func Resolve(t Theme, colour bool) Table {
 	tb.Text = sgr(t.Text, colour)
 	tb.Dim = sgr(t.Dim, colour)
 	tb.Accent = sgr(t.Accent, colour)
+	for i, c := range t.Racers {
+		tb.Racer[i] = sgr(Style{FG: c}, colour)
+		// Reverse video turns the colour into the cell's background, which
+		// reads as a caret on any terminal background, and stays a caret with
+		// the colour stripped.
+		tb.Ghost[i] = "\x1b[7m"
+		if p := sgr(Style{FG: c}, colour); p != "" {
+			tb.Ghost[i] = "\x1b[7;" + p[2:]
+		}
+	}
 	return tb
 }
 
