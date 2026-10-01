@@ -309,6 +309,8 @@ func TestRaceScreensFitSmallTerminals(t *testing.T) {
 	pump(t, m, func() bool { return m.screen == screenRace && allRacing(m) })
 	m.race.goAt = time.Now().Add(-2 * time.Second)
 	m.Update(raceTickMsg{m.race})
+	// Codes are random words, so pin a long one rather than pass or fail by luck.
+	m.race.st.Code = "extraordinary-responsibility"
 	for _, size := range [][2]int{{80, 24}, {60, 20}, {40, 16}} {
 		m.Update(tea.WindowSizeMsg{Width: size[0], Height: size[1]})
 		for _, sc := range []screen{screenLobby, screenBrowse, screenRace} {

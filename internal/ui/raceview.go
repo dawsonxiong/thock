@@ -262,6 +262,10 @@ func (m *Model) raceHeader(box int, title string) []string {
 	if right == "" {
 		right = s.st.Room
 	}
+	// The code is what others type to join, so it stays whole and the title gives way.
+	if room := box - 2 - layout.Width(right); layout.Width(title) > room {
+		title = layout.Truncate(title, max(room, 0))
+	}
 	return []string{
 		m.spread(box, title, right),
 		m.paint(m.tbl.Dim, strings.Repeat("─", box)),
