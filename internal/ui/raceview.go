@@ -11,6 +11,7 @@ import (
 	"github.com/dawsonxiong/thock/internal/layout"
 	"github.com/dawsonxiong/thock/internal/race"
 	"github.com/dawsonxiong/thock/internal/render"
+	"github.com/dawsonxiong/thock/internal/theme"
 	"github.com/dawsonxiong/thock/internal/typing"
 )
 
@@ -20,17 +21,40 @@ const (
 	// laneRight is the width of the figure at the end of each lane.
 	laneRight = 8
 	// laneFloor is the least speed a lane scales its trail to, so a slow
-	// start does not draw at full height.
+	// start does not draw at full brightness.
 	laneFloor = 60
+	// laneBlock is the trail's one height. It stops short of the full cell so
+	// lanes on neighbouring rows keep a sliver of space between them.
+	laneBlock = "▇"
 )
 
 // racerStyle is a player's colour: the accent for you, and the theme's racer
 // colours for everyone else, in the order they joined, so a colour stays with
 // a player for as long as the room lasts.
 func (m *Model) racerStyle(id int) (fg, ghost string) {
+	i := m.racerSlot(id)
+	if i < 0 {
+		return m.tbl.Accent, ghostOf(m.tbl.Accent)
+	}
+	return m.tbl.Racer[i], m.tbl.Ghost[i]
+}
+
+// racerLane is the tones a racer's trail is drawn in, in the same colour as
+// the rest of their lane.
+func (m *Model) racerLane(id int) [theme.LaneShades]string {
+	i := m.racerSlot(id)
+	if i < 0 {
+		return m.tbl.AccentLane
+	}
+	return m.tbl.RacerLane[i]
+}
+
+// racerSlot is which of the theme's racer colours a player has, or -1 for
+// you, who always have the accent.
+func (m *Model) racerSlot(id int) int {
 	s := m.race
 	if id == s.me {
-		return m.tbl.Accent, ghostOf(m.tbl.Accent)
+		return -1
 	}
 	i := 0
 	for _, p := range s.st.Players {
@@ -41,7 +65,7 @@ func (m *Model) racerStyle(id int) (fg, ghost string) {
 			i++
 		}
 	}
-	return m.tbl.Racer[i%len(m.tbl.Racer)], m.tbl.Ghost[i%len(m.tbl.Ghost)]
+	return i % len(m.tbl.Racer)
 }
 
 // ghostOf turns a foreground style into a caret block of the same colour.
@@ -97,6 +121,7 @@ type lane struct {
 	id       int
 	name     string
 	style    string
+	shades   [theme.LaneShades]string
 	trace    []race.Point
 	done     float64
 	wpm      float64
@@ -115,7 +140,7 @@ func (m *Model) liveLanes() []lane {
 			continue
 		}
 		fg, _ := m.racerStyle(p.ID)
-		l := lane{id: p.ID, name: m.racerName(p.ID, p.Name), style: fg, trace: s.traces[p.ID],
+		l := lane{id: p.ID, name: m.racerName(p.ID, p.Name), style: fg, shades: m.racerLane(p.ID), trace: s.traces[p.ID],
 			done: p.Done, wpm: p.WPM, finished: p.Finished, out: p.Out, time: race.Dur(p.Time)}
 		if p.ID == s.me {
 			_, _, l.done = race.Position(m.eng)
@@ -139,7 +164,7 @@ func (m *Model) replayLanes(now time.Time) []lane {
 			continue
 		}
 		fg, _ := m.racerStyle(st.ID)
-		l := lane{id: st.ID, name: m.racerName(st.ID, st.Name), style: fg, trace: rp.traces[st.ID]}
+		l := lane{id: st.ID, name: m.racerName(st.ID, st.Name), style: fg, shades: m.racerLane(st.ID), trace: rp.traces[st.ID]}
 		_, _, l.done = race.Position(e)
 		if n := len(l.trace); n > 0 {
 			l.wpm = l.trace[n-1].WPM
@@ -202,7 +227,7 @@ func (m *Model) laneRows(box int, ls []lane, started bool) []string {
 		return nil
 	}
 
-	// One scale for every lane, so a taller trail really is a faster one.
+	// One scale for every lane, so a brighter trail really is a faster one.
 	hi := float64(laneFloor)
 	for _, l := range ls {
 		hi = math.Max(hi, l.wpm*1.15)
@@ -211,14 +236,21 @@ func (m *Model) laneRows(box int, ls []lane, started bool) []string {
 
 	out := make([]string, 0, len(ls))
 	for _, l := range ls {
+		// The bar always covers the cell the racer is in, so everyone shows
+		// a block of their colour from the countdown on, and the bar's end is
+		// where they are.
 		pos := int(math.Round(l.done * float64(track-1)))
-		pos = max(0, min(pos, track-1))
+		covered := max(0, min(pos, track-1)) + 1
 		trail := race.Trail(l.trace, track)
-		if len(trail) > pos {
-			trail = trail[:pos]
+		if len(trail) > covered {
+			trail = trail[:covered]
 		}
-		for len(trail) < pos {
-			trail = append(trail, 0)
+		for len(trail) < covered {
+			last := 0.0
+			if n := len(trail); n > 0 {
+				last = trail[n-1]
+			}
+			trail = append(trail, last)
 		}
 
 		var b strings.Builder
@@ -226,13 +258,8 @@ func (m *Model) laneRows(box int, ls []lane, started bool) []string {
 		name := layout.Truncate(l.name, maxLaneName)
 		b.WriteString(m.paint(l.style, name))
 		b.WriteString(strings.Repeat(" ", nameW-layout.Width(name)+2))
-		b.WriteString(m.paint(l.style, chart.Scaled(trail, 0, hi)))
-		head := "●"
-		if l.out {
-			head = "×"
-		}
-		b.WriteString(m.paint(l.style, head))
-		if rest := track - pos - 1; rest > 0 {
+		m.trail(&b, trail, hi, l.shades)
+		if rest := track - covered; rest > 0 {
 			b.WriteString(m.paint(m.tbl.Dim, strings.Repeat("·", rest-1)+"│"))
 		}
 
@@ -251,6 +278,29 @@ func (m *Model) laneRows(box int, ls []lane, started bool) []string {
 		out = append(out, b.String())
 	}
 	return out
+}
+
+// trail draws the part of a lane already covered: one block per column, all
+// the same height so the lanes read as even bars, each in the tone for the
+// racer's speed when they passed that point. Runs of one tone share an escape
+// sequence.
+func (m *Model) trail(b *strings.Builder, vals []float64, hi float64, shades [theme.LaneShades]string) {
+	cur := -1
+	for _, v := range vals {
+		tone := min(int(v/hi*theme.LaneShades), theme.LaneShades-1)
+		tone = max(tone, 0)
+		if tone != cur {
+			if cur >= 0 && shades[cur] != "" {
+				b.WriteString(m.tbl.Reset)
+			}
+			b.WriteString(shades[tone])
+			cur = tone
+		}
+		b.WriteString(laneBlock)
+	}
+	if cur >= 0 && shades[cur] != "" {
+		b.WriteString(m.tbl.Reset)
+	}
 }
 
 // header is the title row of every race screen: what is being raced on the

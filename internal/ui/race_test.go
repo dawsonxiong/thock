@@ -251,6 +251,43 @@ func allRacing(m *Model) bool {
 	return len(m.race.st.Players) > 0
 }
 
+// The trail behind each racer is one height all the way along, however their
+// speed changed, and its end is where the racer is: there is no separate
+// marker.
+func TestLaneTrailIsOneHeight(t *testing.T) {
+	m, _ := newRaceModel(t)
+	pump(t, m, func() bool { return len(m.race.st.Players) == 2 })
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	pump(t, m, func() bool { return m.screen == screenRace && allRacing(m) })
+	m.race.goAt = time.Now().Add(-3 * time.Second)
+	m.Update(raceTickMsg{m.race})
+	for i := range m.race.st.Players {
+		p := &m.race.st.Players[i]
+		if p.ID != m.race.me {
+			p.Done, p.WPM = 0.6, 90
+			// A slow start and a fast finish: two very different tones.
+			m.race.traces[p.ID] = []race.Point{{At: time.Second, Done: 0.1, WPM: 20}, {At: 2 * time.Second, Done: 0.6, WPM: 140}}
+		}
+	}
+	var lane string
+	for _, l := range strings.Split(screenText(m), "\n") {
+		if strings.Contains(l, "maya") && strings.Contains(l, "▇") {
+			lane = l
+		}
+	}
+	if lane == "" {
+		t.Fatalf("no lane for maya:\n%s", screenText(m))
+	}
+	trail := lane[strings.Index(lane, "▇"):strings.Index(lane, "·")]
+	if strings.Trim(trail, "▇") != "" {
+		t.Errorf("trail has blocks of more than one height, or a marker: %q", trail)
+	}
+	// 60% of the way along a track, the bar is well past halfway.
+	if n := len([]rune(trail)); n < 10 {
+		t.Errorf("trail is only %d blocks long at 60%% of the way", n)
+	}
+}
+
 // textLine is the first line of the text on a race screen.
 func textLine(screen string) string {
 	for _, l := range strings.Split(screen, "\n") {
