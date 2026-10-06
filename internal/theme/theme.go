@@ -5,6 +5,7 @@ package theme
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -60,7 +61,22 @@ type Table struct {
 	// your text: the character they are on, drawn as a block of their colour.
 	Racer [6]string
 	Ghost [6]string
+
+	// RacerLane and AccentLane are each racer's colour in LaneShades tones,
+	// slowest first, for the trail behind them on the track. Yours is the
+	// accent.
+	RacerLane  [6][LaneShades]string
+	AccentLane [LaneShades]string
 }
+
+// LaneShades is how many tones a race lane's trail is drawn in. The trail is
+// one height all the way along, so the racer's marker sits centred on it, and
+// speed shows as tone instead: brighter where the racer was faster.
+const LaneShades = 4
+
+// laneMix is how much of the racer's colour each tone keeps, blended into the
+// theme's pending-text colour, slowest first.
+var laneMix = [LaneShades]float64{0.4, 0.6, 0.8, 1}
 
 const reset = "\x1b[0m"
 
@@ -89,8 +105,53 @@ func Resolve(t Theme, colour bool) Table {
 		if p := sgr(Style{FG: c}, colour); p != "" {
 			tb.Ghost[i] = "\x1b[7;" + p[2:]
 		}
+		tb.RacerLane[i] = laneShades(Style{FG: c}, t.Pending.FG, colour)
 	}
+	tb.AccentLane = laneShades(t.Accent, t.Pending.FG, colour)
 	return tb
+}
+
+// laneShades ramps a style from dim to full. A hex colour is blended toward
+// base; anything else, an ANSI colour or no colour at all, has only the
+// faint attribute to work with, so the slower half of the ramp is faint.
+func laneShades(s Style, base Colour, colour bool) [LaneShades]string {
+	var out [LaneShades]string
+	for i, f := range laneMix {
+		if c, ok := blend(s.FG, base, f); ok && colour {
+			out[i] = sgr(Style{FG: c}, colour)
+			continue
+		}
+		t := s
+		if i < LaneShades/2 {
+			t.Bold, t.Faint = false, true
+		}
+		out[i] = sgr(t, colour)
+	}
+	return out
+}
+
+// blend mixes f of colour a with the rest of colour b. Both must be hex.
+func blend(a, b Colour, f float64) (Colour, bool) {
+	ar, ag, ab, ok1 := rgb(a)
+	br, bg, bb, ok2 := rgb(b)
+	if !ok1 || !ok2 {
+		return "", false
+	}
+	mix := func(x, y uint8) uint8 { return uint8(math.Round(float64(x)*f + float64(y)*(1-f))) }
+	return Colour(fmt.Sprintf("#%02x%02x%02x", mix(ar, br), mix(ag, bg), mix(ab, bb))), true
+}
+
+// rgb reads a hex colour.
+func rgb(c Colour) (r, g, b uint8, ok bool) {
+	s := string(c)
+	if !strings.HasPrefix(s, "#") || len(s) != 7 {
+		return 0, 0, 0, false
+	}
+	v, err := strconv.ParseUint(s[1:], 16, 32)
+	if err != nil {
+		return 0, 0, 0, false
+	}
+	return uint8(v >> 16), uint8(v >> 8), uint8(v), true
 }
 
 // monochrome re-expresses a palette using attributes alone.
