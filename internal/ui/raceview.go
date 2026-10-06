@@ -236,14 +236,21 @@ func (m *Model) laneRows(box int, ls []lane, started bool) []string {
 
 	out := make([]string, 0, len(ls))
 	for _, l := range ls {
+		// The bar always covers the cell the racer is in, so everyone shows
+		// a block of their colour from the countdown on, and the bar's end is
+		// where they are.
 		pos := int(math.Round(l.done * float64(track-1)))
-		pos = max(0, min(pos, track-1))
+		covered := max(0, min(pos, track-1)) + 1
 		trail := race.Trail(l.trace, track)
-		if len(trail) > pos {
-			trail = trail[:pos]
+		if len(trail) > covered {
+			trail = trail[:covered]
 		}
-		for len(trail) < pos {
-			trail = append(trail, 0)
+		for len(trail) < covered {
+			last := 0.0
+			if n := len(trail); n > 0 {
+				last = trail[n-1]
+			}
+			trail = append(trail, last)
 		}
 
 		var b strings.Builder
@@ -252,12 +259,7 @@ func (m *Model) laneRows(box int, ls []lane, started bool) []string {
 		b.WriteString(m.paint(l.style, name))
 		b.WriteString(strings.Repeat(" ", nameW-layout.Width(name)+2))
 		m.trail(&b, trail, hi, l.shades)
-		head := "●"
-		if l.out {
-			head = "×"
-		}
-		b.WriteString(m.paint(l.style, head))
-		if rest := track - pos - 1; rest > 0 {
+		if rest := track - covered; rest > 0 {
 			b.WriteString(m.paint(m.tbl.Dim, strings.Repeat("·", rest-1)+"│"))
 		}
 
@@ -279,9 +281,9 @@ func (m *Model) laneRows(box int, ls []lane, started bool) []string {
 }
 
 // trail draws the part of a lane already covered: one block per column, all
-// the same height so the marker at the end sits centred on it, each in the
-// tone for the racer's speed when they passed that point. Runs of one tone
-// share an escape sequence.
+// the same height so the lanes read as even bars, each in the tone for the
+// racer's speed when they passed that point. Runs of one tone share an escape
+// sequence.
 func (m *Model) trail(b *strings.Builder, vals []float64, hi float64, shades [theme.LaneShades]string) {
 	cur := -1
 	for _, v := range vals {

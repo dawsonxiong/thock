@@ -70,8 +70,8 @@ type Table struct {
 }
 
 // LaneShades is how many tones a race lane's trail is drawn in. The trail is
-// one height all the way along, so the racer's marker sits centred on it, and
-// speed shows as tone instead: brighter where the racer was faster.
+// one height all the way along, so lanes read as even bars, and speed shows as
+// tone instead: brighter where the racer was faster.
 const LaneShades = 4
 
 // laneMix is how much of the racer's colour each tone keeps, blended into the
